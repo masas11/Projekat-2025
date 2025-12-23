@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"golang.org/x/crypto/bcrypt"
 
 	"users-service/internal/dto"
 	"users-service/internal/model"
@@ -17,8 +18,8 @@ type RegisterHandler struct {
 	Store *store.UserStore
 }
 
-func NewRegisterHandler(store *store.UserStore) *RegisterHandler {
-	return &RegisterHandler{Store: store}
+func NewRegisterHandler(s *store.UserStore) *RegisterHandler {
+	return &RegisterHandler{Store: s}
 }
 
 func (h *RegisterHandler) Register(w http.ResponseWriter, r *http.Request) {
@@ -48,20 +49,27 @@ func (h *RegisterHandler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// password strength validation
-	if err := validation.ValidatePassword(req.Password); err != nil {
+	if err := validation.IsStrongPassword(req.Password); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
+	// hash lozinke
+	hash, _ := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	now := time.Now()
+
 	user := &model.User{
-		ID:           uuid.NewString(),
-		FirstName:    req.FirstName,
-		LastName:     req.LastName,
-		Email:        req.Email,
-		Username:     req.Username,
-		PasswordHash: req.Password, // privremeno, hash dolazi kasnije
-		Verified:     false,
-		CreatedAt:   time.Now(),
+		ID:                uuid.NewString(),
+		FirstName:         req.FirstName,
+		LastName:          req.LastName,
+		Email:             req.Email,
+		Username:          req.Username,
+		PasswordHash:      string(hash),
+		Role:              "USER",
+		Verified:          true,
+		PasswordChangedAt: now,
+		PasswordExpiresAt: now.Add(60 * 24 * time.Hour),
+		CreatedAt:         now,
 	}
 
 	if err := h.Store.AddUser(user); err != nil {
@@ -71,7 +79,6 @@ func (h *RegisterHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-
 	json.NewEncoder(w).Encode(map[string]string{
 		"message": "registration successful, verification email sent",
 	})

@@ -2,28 +2,32 @@ package validation
 
 import (
 	"errors"
-	"regexp"
+	"unicode"
 )
 
-var (
-	ErrWeakPassword = errors.New("password must be at least 8 characters long and contain one uppercase letter and one number")
+var ErrWeakPassword = errors.New(
+	"password must be at least 8 characters long and contain one uppercase letter and one number",
 )
 
-var (
-	upperCaseRegex = regexp.MustCompile(`[A-Z]`)
-	numberRegex    = regexp.MustCompile(`[0-9]`)
-)
-
-func ValidatePassword(password string) error {
+// IsStrongPassword proverava da li lozinka ispunjava osnovne sigurnosne kriterijume
+func IsStrongPassword(password string) error {
 	if len(password) < 8 {
 		return ErrWeakPassword
 	}
 
-	if !upperCaseRegex.MatchString(password) {
-		return ErrWeakPassword
+	hasUpper := false
+	hasNumber := false
+
+	for _, r := range password {
+		if unicode.IsUpper(r) {
+			hasUpper = true
+		}
+		if unicode.IsDigit(r) {
+			hasNumber = true
+		}
 	}
 
-	if !numberRegex.MatchString(password) {
+	if !hasUpper || !hasNumber {
 		return ErrWeakPassword
 	}
 

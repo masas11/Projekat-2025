@@ -18,7 +18,7 @@ func main() {
 
 	// inicijalizacija handler-a
 	registerHandler := handler.NewRegisterHandler(userStore)
-	loginHandler := handler.NewLoginHandler(userStore)
+	loginHandler := handler.NewLoginHandler(userStore, cfg)
 	passwordHandler := handler.NewPasswordHandler(userStore)
 
 	// router

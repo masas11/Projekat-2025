@@ -3,7 +3,8 @@ package config
 import "os"
 
 type Config struct {
-	Port string
+	Port      string
+	JWTSecret string
 }
 
 func Load() *Config {
@@ -12,7 +13,13 @@ func Load() *Config {
 		port = "8001"
 	}
 
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		jwtSecret = "your-secret-key-change-in-production" // Default secret, should be changed in production
+	}
+
 	return &Config{
-		Port: port,
+		Port:      port,
+		JWTSecret: jwtSecret,
 	}
 }

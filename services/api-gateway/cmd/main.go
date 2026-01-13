@@ -90,6 +90,21 @@ func main() {
 		proxyRequest(w, r, cfg.ContentServiceURL+"/health")
 	})
 
+	// Artists routes
+	// GET /api/content/artists - get all artists
+	// POST /api/content/artists - create artist (admin only)
+	mux.HandleFunc("/api/content/artists", func(w http.ResponseWriter, r *http.Request) {
+		proxyRequest(w, r, cfg.ContentServiceURL+"/artists")
+	})
+
+	// GET /api/content/artists/{id} - get artist by ID
+	// PUT /api/content/artists/{id} - update artist (admin only)
+	mux.HandleFunc("/api/content/artists/", func(w http.ResponseWriter, r *http.Request) {
+		// Extract the path after /api/content/artists/
+		path := r.URL.Path[len("/api/content/artists/"):]
+		proxyRequest(w, r, cfg.ContentServiceURL+"/artists/"+path)
+	})
+
 	log.Println("API Gateway running on port", cfg.Port)
 	log.Fatal(http.ListenAndServe(":"+cfg.Port, mux))
 }

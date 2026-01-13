@@ -7,6 +7,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	"users-service/config"
 	"users-service/internal/dto"
 	"users-service/internal/mail"
 	"users-service/internal/security"
@@ -14,11 +15,15 @@ import (
 )
 
 type LoginHandler struct {
-	Store *store.UserStore
+	Store  *store.UserStore
+	Config *config.Config
 }
 
-func NewLoginHandler(s *store.UserStore) *LoginHandler {
-	return &LoginHandler{Store: s}
+func NewLoginHandler(s *store.UserStore, cfg *config.Config) *LoginHandler {
+	return &LoginHandler{
+		Store:  s,
+		Config: cfg,
+	}
 }
 
 func (h *LoginHandler) RequestOTP(w http.ResponseWriter, r *http.Request) {
@@ -65,8 +70,16 @@ func (h *LoginHandler) RequestOTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *LoginHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
 	var req dto.OTPRequest
-	json.NewDecoder(r.Body).Decode(&req)
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		return
+	}
 
 	entry, ok := h.Store.GetOTP(req.Username)
 	if !ok || security.IsExpired(entry) || entry.Code != req.OTP {
@@ -74,6 +87,34 @@ func (h *LoginHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get user to generate token
+	user, err := h.Store.GetByUsername(req.Username)
+	if err != nil {
+		http.Error(w, "user not found", http.StatusUnauthorized)
+		return
+	}
+
+	// Generate JWT token
+	token, err := security.GenerateToken(user.ID, user.Username, user.Role, h.Config.JWTSecret)
+	if err != nil {
+		http.Error(w, "failed to generate token", http.StatusInternalServerError)
+		return
+	}
+
 	h.Store.DeleteOTP(req.Username)
+
+	// Return token and user info
+	response := dto.LoginResponse{
+		Token:     token,
+		ID:        user.ID,
+		Username:  user.Username,
+		Email:     user.Email,
+		FirstName: user.FirstName,
+		LastName:  user.LastName,
+		Role:      user.Role,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
 }

@@ -1,0 +1,100 @@
+services:
+  api-gateway:
+    build:
+      context: ./services/api-gateway
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - USERS_SERVICE_URL=http://users-service:8001
+      - CONTENT_SERVICE_URL=http://content-service:8002
+    depends_on:
+      - users-service
+      - content-service
+    networks:
+      - music-streaming-network
+
+  users-service:
+    build:
+      context: ./services/users-service
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      - PORT=8001
+    networks:
+      - music-streaming-network
+
+  content-service:
+    build:
+      context: ./services/content-service
+      dockerfile: Dockerfile
+    ports:
+      - "8002:8002"
+    environment:
+      - PORT=8002
+    networks:
+      - music-streaming-network
+
+  ratings-service:
+    build:
+      context: ./services/ratings-service
+      dockerfile: Dockerfile
+    ports:
+      - "8003:8003"
+    environment:
+      - PORT=8003
+      - CONTENT_SERVICE_URL=http://content-service:8002
+    depends_on:
+      - content-service
+    networks:
+      - music-streaming-network
+
+  subscriptions-service:
+    build:
+      context: ./services/subscriptions-service
+      dockerfile: Dockerfile
+    ports:
+      - "8004:8004"
+    environment:
+      - PORT=8004
+    networks:
+      - music-streaming-network
+
+  notifications-service:
+    build:
+      context: ./services/notifications-service
+      dockerfile: Dockerfile
+    ports:
+      - "8005:8005"
+    environment:
+      - PORT=8005
+    networks:
+      - music-streaming-network
+
+  recommendation-service:
+    build:
+      context: ./services/recommendation-service
+      dockerfile: Dockerfile
+    ports:
+      - "8006:8006"
+    environment:
+      - PORT=8006
+    networks:
+      - music-streaming-network
+
+  analytics-service:
+    build:
+      context: ./services/analytics-service
+      dockerfile: Dockerfile
+    ports:
+      - "8007:8007"
+    environment:
+      - PORT=8007
+    networks:
+      - music-streaming-network
+
+networks:
+  music-streaming-network:
+    driver: bridge

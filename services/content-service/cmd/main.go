@@ -44,16 +44,17 @@ func main() {
 
 	// Artist routes
 	// GET /artists - get all artists (public)
+	// POST /artists - create artist (admin only, requires JWT)
 	mux.HandleFunc("/artists", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet {
+		switch r.Method {
+		case http.MethodGet:
 			artistHandler.GetAllArtists(w, r)
-		} else {
+		case http.MethodPost:
+			middleware.JWTAuth(cfg)(middleware.AdminOnly(artistHandler.CreateArtist))(w, r)
+		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
 	})
-
-	// POST /artists - create artist (admin only, requires JWT)
-	mux.HandleFunc("/artists", middleware.JWTAuth(cfg)(middleware.AdminOnly(artistHandler.CreateArtist)))
 
 	// GET /artists/{id} - get artist by ID (public)
 	mux.HandleFunc("/artists/", func(w http.ResponseWriter, r *http.Request) {

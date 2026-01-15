@@ -7,6 +7,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	"users-service/config"
 	"users-service/internal/dto"
 	"users-service/internal/mail"
 	"users-service/internal/security"
@@ -14,11 +15,15 @@ import (
 )
 
 type LoginHandler struct {
-	Store *store.UserStore
+	Repo   *store.UserRepository
+	Config *config.Config
 }
 
-func NewLoginHandler(s *store.UserStore) *LoginHandler {
-	return &LoginHandler{Store: s}
+func NewLoginHandler(repo *store.UserRepository, cfg *config.Config) *LoginHandler {
+	return &LoginHandler{
+		Repo:   repo,
+		Config: cfg,
+	}
 }
 
 func (h *LoginHandler) RequestOTP(w http.ResponseWriter, r *http.Request) {
@@ -30,7 +35,8 @@ func (h *LoginHandler) RequestOTP(w http.ResponseWriter, r *http.Request) {
 	var req dto.LoginRequest
 	json.NewDecoder(r.Body).Decode(&req)
 
-	user, err := h.Store.GetByUsername(req.Username)
+	ctx := r.Context()
+	user, err := h.Repo.GetByUsername(ctx, req.Username)
 	if err != nil {
 		http.Error(w, "invalid credentials", http.StatusUnauthorized)
 		return
@@ -51,29 +57,69 @@ func (h *LoginHandler) RequestOTP(w http.ResponseWriter, r *http.Request) {
 		if user.FailedLoginAttempts >= 5 {
 			user.LockedUntil = time.Now().Add(15 * time.Minute)
 		}
+		// Update failed login attempts
+		h.Repo.Update(ctx, user)
 		http.Error(w, "invalid credentials", http.StatusUnauthorized)
 		return
 	}
 
 	user.FailedLoginAttempts = 0
+	h.Repo.Update(ctx, user)
 
 	otp, _ := security.GenerateOTP()
-	h.Store.SetOTP(user.Username, otp)
+	h.Repo.SetOTP(ctx, user.Username, otp)
 	mail.SendOTP(user.Email, otp)
 
 	w.WriteHeader(http.StatusOK)
 }
 
 func (h *LoginHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
-	var req dto.OTPRequest
-	json.NewDecoder(r.Body).Decode(&req)
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 
-	entry, ok := h.Store.GetOTP(req.Username)
+	var req dto.OTPRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	entry, ok := h.Repo.GetOTP(ctx, req.Username)
 	if !ok || security.IsExpired(entry) || entry.Code != req.OTP {
 		http.Error(w, "invalid OTP", http.StatusUnauthorized)
 		return
 	}
 
-	h.Store.DeleteOTP(req.Username)
+	// Get user to generate token
+	user, err := h.Repo.GetByUsername(ctx, req.Username)
+	if err != nil {
+		http.Error(w, "user not found", http.StatusUnauthorized)
+		return
+	}
+
+	// Generate JWT token
+	token, err := security.GenerateToken(user.ID, user.Username, user.Role, h.Config.JWTSecret)
+	if err != nil {
+		http.Error(w, "failed to generate token", http.StatusInternalServerError)
+		return
+	}
+
+	h.Repo.DeleteOTP(ctx, req.Username)
+
+	// Return token and user info
+	response := dto.LoginResponse{
+		Token:     token,
+		ID:        user.ID,
+		Username:  user.Username,
+		Email:     user.Email,
+		FirstName: user.FirstName,
+		LastName:  user.LastName,
+		Role:      user.Role,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
 }

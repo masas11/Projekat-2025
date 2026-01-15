@@ -1,0 +1,412 @@
+{
+	"info": {
+		"_postman_id": "music-streaming-api-2025",
+		"name": "Music Streaming API",
+		"description": "Complete API collection for Music Streaming microservices",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Health Checks",
+			"item": [
+				{
+					"name": "Users Service Health (Direct)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8001/health",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8001",
+							"path": ["health"]
+						}
+					}
+				},
+				{
+					"name": "Users Service Health (Gateway)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8081/api/users/health",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8081",
+							"path": ["api", "users", "health"]
+						}
+					}
+				},
+				{
+					"name": "Content Service Health (Direct)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8002/health",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8002",
+							"path": ["health"]
+						}
+					}
+				},
+				{
+					"name": "Content Service Health (Gateway)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8081/api/content/health",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8081",
+							"path": ["api", "content", "health"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Users Service",
+			"item": [
+				{
+					"name": "Register User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"firstName\": \"John\",\n  \"lastName\": \"Doe\",\n  \"email\": \"john.doe@example.com\",\n  \"username\": \"johndoe\",\n  \"password\": \"StrongP@ss123\",\n  \"confirmPassword\": \"StrongP@ss123\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8081/api/users/register",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8081",
+							"path": ["api", "users", "register"]
+						}
+					}
+				},
+				{
+					"name": "Request OTP (Login)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"username\": \"johndoe\",\n  \"password\": \"StrongP@ss123\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8081/api/users/login/request-otp",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8081",
+							"path": ["api", "users", "login", "request-otp"]
+						}
+					}
+				},
+				{
+					"name": "Verify OTP (Login)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    var jsonData = pm.response.json();",
+									"    pm.environment.set(\"jwt_token\", jsonData.token);",
+									"    pm.environment.set(\"user_id\", jsonData.id);",
+									"    pm.environment.set(\"username\", jsonData.username);",
+									"    console.log(\"JWT token saved:\", jsonData.token);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"username\": \"johndoe\",\n  \"otp\": \"123456\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8081/api/users/login/verify-otp",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8081",
+							"path": ["api", "users", "login", "verify-otp"]
+						}
+					}
+				},
+				{
+					"name": "Change Password",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"username\": \"johndoe\",\n  \"oldPassword\": \"StrongP@ss123\",\n  \"newPassword\": \"NewStrongP@ss456\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8081/api/users/password/change",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8081",
+							"path": ["api", "users", "password", "change"]
+						}
+					}
+				},
+				{
+					"name": "Reset Password",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"username\": \"johndoe\",\n  \"newPassword\": \"NewStrongP@ss456\"\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8081/api/users/password/reset",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8081",
+							"path": ["api", "users", "password", "reset"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Content Service",
+			"item": [
+				{
+					"name": "Get All Artists",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8081/api/content/artists",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8081",
+							"path": ["api", "content", "artists"]
+						}
+					}
+				},
+				{
+					"name": "Create Artist (Admin)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"The Beatles\",\n  \"biography\": \"English rock band formed in Liverpool in 1960.\",\n  \"genres\": [\"Rock\", \"Pop\", \"Psychedelic Rock\"]\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8081/api/content/artists",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8081",
+							"path": ["api", "content", "artists"]
+						}
+					}
+				},
+				{
+					"name": "Get Artist by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8081/api/content/artists/:id",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8081",
+							"path": ["api", "content", "artists", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "507f1f77bcf86cd799439011",
+									"description": "Artist ID"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Update Artist (Admin)",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{jwt_token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"The Beatles (Updated)\",\n  \"biography\": \"Updated biography...\",\n  \"genres\": [\"Rock\", \"Pop\", \"Classic Rock\"]\n}"
+						},
+						"url": {
+							"raw": "http://localhost:8081/api/content/artists/:id",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8081",
+							"path": ["api", "content", "artists", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "507f1f77bcf86cd799439011",
+									"description": "Artist ID"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Check Song Exists",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8002/songs/exists",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8002",
+							"path": ["songs", "exists"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Other Services",
+			"item": [
+				{
+					"name": "Ratings Service Health",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8003/health",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8003",
+							"path": ["health"]
+						}
+					}
+				},
+				{
+					"name": "Subscriptions Service Health",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8004/health",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8004",
+							"path": ["health"]
+						}
+					}
+				},
+				{
+					"name": "Notifications Service Health",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8005/health",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8005",
+							"path": ["health"]
+						}
+					}
+				},
+				{
+					"name": "Recommendation Service Health",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8006/health",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8006",
+							"path": ["health"]
+						}
+					}
+				},
+				{
+					"name": "Analytics Service Health",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8007/health",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "8007",
+							"path": ["health"]
+						}
+					}
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8081",
+			"type": "string"
+		},
+		{
+			"key": "jwt_token",
+			"value": "",
+			"type": "string"
+		}
+	]
+}

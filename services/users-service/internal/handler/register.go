@@ -15,11 +15,11 @@ import (
 )
 
 type RegisterHandler struct {
-	Store *store.UserStore
+	Repo *store.UserRepository
 }
 
-func NewRegisterHandler(s *store.UserStore) *RegisterHandler {
-	return &RegisterHandler{Store: s}
+func NewRegisterHandler(repo *store.UserRepository) *RegisterHandler {
+	return &RegisterHandler{Repo: repo}
 }
 
 func (h *RegisterHandler) Register(w http.ResponseWriter, r *http.Request) {
@@ -72,8 +72,13 @@ func (h *RegisterHandler) Register(w http.ResponseWriter, r *http.Request) {
 		CreatedAt:         now,
 	}
 
-	if err := h.Store.AddUser(user); err != nil {
-		http.Error(w, err.Error(), http.StatusConflict)
+	ctx := r.Context()
+	if err := h.Repo.Create(ctx, user); err != nil {
+		if err == store.ErrUserExists {
+			http.Error(w, err.Error(), http.StatusConflict)
+		} else {
+			http.Error(w, "failed to create user", http.StatusInternalServerError)
+		}
 		return
 	}
 

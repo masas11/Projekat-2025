@@ -3,9 +3,10 @@ package config
 import "os"
 
 type Config struct {
-	Port           string
-	UsersServiceURL string
-	ContentServiceURL string
+	Port                string
+	UsersServiceURL     string
+	ContentServiceURL   string
+	NotificationsServiceURL string
 }
 
 func Load() *Config {
@@ -24,9 +25,15 @@ func Load() *Config {
 		contentURL = "http://localhost:8002"
 	}
 
+	notificationsURL := os.Getenv("NOTIFICATIONS_SERVICE_URL")
+	if notificationsURL == "" {
+		notificationsURL = "http://localhost:8005"
+	}
+
 	return &Config{
-		Port: port,
-		UsersServiceURL: usersURL,
-		ContentServiceURL: contentURL,
+		Port:                port,
+		UsersServiceURL:     usersURL,
+		ContentServiceURL:   contentURL,
+		NotificationsServiceURL: notificationsURL,
 	}
 }

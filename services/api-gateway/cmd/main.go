@@ -105,6 +105,64 @@ func main() {
 		proxyRequest(w, r, cfg.ContentServiceURL+"/artists/"+path)
 	})
 
+	// Album routes
+	// GET /api/content/albums - get all albums
+	// POST /api/content/albums - create album (admin only)
+	mux.HandleFunc("/api/content/albums", func(w http.ResponseWriter, r *http.Request) {
+		proxyRequest(w, r, cfg.ContentServiceURL+"/albums")
+	})
+
+	// GET /api/content/albums/by-artist?artistId={id} - get albums by artist
+	mux.HandleFunc("/api/content/albums/by-artist", func(w http.ResponseWriter, r *http.Request) {
+		query := ""
+		if r.URL.RawQuery != "" {
+			query = "?" + r.URL.RawQuery
+		}
+		proxyRequest(w, r, cfg.ContentServiceURL+"/albums/by-artist"+query)
+	})
+
+	// GET /api/content/albums/{id} - get album by ID
+	mux.HandleFunc("/api/content/albums/", func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path[len("/api/content/albums/"):]
+		proxyRequest(w, r, cfg.ContentServiceURL+"/albums/"+path)
+	})
+
+	// Song routes
+	// GET /api/content/songs - get all songs
+	// POST /api/content/songs - create song (admin only)
+	mux.HandleFunc("/api/content/songs", func(w http.ResponseWriter, r *http.Request) {
+		proxyRequest(w, r, cfg.ContentServiceURL+"/songs")
+	})
+
+	// GET /api/content/songs/by-album?albumId={id} - get songs by album
+	mux.HandleFunc("/api/content/songs/by-album", func(w http.ResponseWriter, r *http.Request) {
+		query := ""
+		if r.URL.RawQuery != "" {
+			query = "?" + r.URL.RawQuery
+		}
+		proxyRequest(w, r, cfg.ContentServiceURL+"/songs/by-album"+query)
+	})
+
+	// GET /api/content/songs/{id} - get song by ID
+	mux.HandleFunc("/api/content/songs/", func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path[len("/api/content/songs/"):]
+		proxyRequest(w, r, cfg.ContentServiceURL+"/songs/"+path)
+	})
+
+	// NOTIFICATIONS SERVICE ROUTES
+	mux.HandleFunc("/api/notifications/health", func(w http.ResponseWriter, r *http.Request) {
+		proxyRequest(w, r, cfg.NotificationsServiceURL+"/health")
+	})
+
+	// GET /api/notifications?userId={id} - get notifications for user
+	mux.HandleFunc("/api/notifications", func(w http.ResponseWriter, r *http.Request) {
+		query := ""
+		if r.URL.RawQuery != "" {
+			query = "?" + r.URL.RawQuery
+		}
+		proxyRequest(w, r, cfg.NotificationsServiceURL+"/notifications"+query)
+	})
+
 	log.Println("API Gateway running on port", cfg.Port)
 	log.Fatal(http.ListenAndServe(":"+cfg.Port, mux))
 }

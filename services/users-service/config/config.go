@@ -3,8 +3,10 @@ package config
 import "os"
 
 type Config struct {
-	Port      string
-	JWTSecret string
+	Port            string
+	JWTSecret       string
+	MongoDBURI      string
+	MongoDBDatabase string
 }
 
 func Load() *Config {
@@ -18,8 +20,20 @@ func Load() *Config {
 		jwtSecret = "your-secret-key-change-in-production" // Default secret, should be changed in production
 	}
 
+	mongoURI := os.Getenv("MONGODB_URI")
+	if mongoURI == "" {
+		mongoURI = "mongodb://localhost:27017"
+	}
+
+	mongoDB := os.Getenv("MONGODB_DATABASE")
+	if mongoDB == "" {
+		mongoDB = "users_db"
+	}
+
 	return &Config{
-		Port:      port,
-		JWTSecret: jwtSecret,
+		Port:            port,
+		JWTSecret:       jwtSecret,
+		MongoDBURI:      mongoURI,
+		MongoDBDatabase: mongoDB,
 	}
 }

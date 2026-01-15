@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
 	"strings"
@@ -24,9 +25,13 @@ func main() {
 
 	// Initialize repositories
 	artistRepo := store.NewArtistRepository(dbStore.Database)
+	albumRepo := store.NewAlbumRepository(dbStore.Database)
+	songRepo := store.NewSongRepository(dbStore.Database)
 
 	// Initialize handlers
 	artistHandler := handler.NewArtistHandler(artistRepo)
+	albumHandler := handler.NewAlbumHandler(albumRepo)
+	songHandler := handler.NewSongHandler(songRepo, albumRepo)
 
 	mux := http.NewServeMux()
 
@@ -36,10 +41,89 @@ func main() {
 		w.Write([]byte("content-service is running"))
 	})
 
-	// Dummy endpoint for 3.3 (song existence check)
+	// Album routes
+	// GET /albums - get all albums (public)
+	// POST /albums - create album (admin only, requires JWT)
+	mux.HandleFunc("/albums", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			albumHandler.GetAllAlbums(w, r)
+		case http.MethodPost:
+			middleware.JWTAuth(cfg)(middleware.AdminOnly(albumHandler.CreateAlbum))(w, r)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	// GET /albums?artistId={id} - get albums by artist
+	mux.HandleFunc("/albums/by-artist", albumHandler.GetAlbumsByArtist)
+
+	// GET /albums/{id} - get album by ID (public)
+	mux.HandleFunc("/albums/", func(w http.ResponseWriter, r *http.Request) {
+		path := strings.TrimPrefix(r.URL.Path, "/albums/")
+		if path == "" {
+			http.Error(w, "album ID is required", http.StatusBadRequest)
+			return
+		}
+
+		switch r.Method {
+		case http.MethodGet:
+			albumHandler.GetAlbum(w, r)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	// Song routes
+	// GET /songs - get all songs (public)
+	// POST /songs - create song (admin only, requires JWT)
+	mux.HandleFunc("/songs", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			songHandler.GetAllSongs(w, r)
+		case http.MethodPost:
+			middleware.JWTAuth(cfg)(middleware.AdminOnly(songHandler.CreateSong))(w, r)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	// GET /songs?albumId={id} - get songs by album
+	mux.HandleFunc("/songs/by-album", songHandler.GetSongsByAlbum)
+
+	// GET /songs/{id} - get song by ID (public)
+	mux.HandleFunc("/songs/", func(w http.ResponseWriter, r *http.Request) {
+		path := strings.TrimPrefix(r.URL.Path, "/songs/")
+		if path == "" {
+			http.Error(w, "song ID is required", http.StatusBadRequest)
+			return
+		}
+
+		switch r.Method {
+		case http.MethodGet:
+			songHandler.GetSong(w, r)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	// Song existence check endpoint
 	mux.HandleFunc("/songs/exists", func(w http.ResponseWriter, r *http.Request) {
+		songID := r.URL.Query().Get("id")
+		if songID == "" {
+			http.Error(w, "id query parameter is required", http.StatusBadRequest)
+			return
+		}
+
+		exists, err := songRepo.Exists(r.Context(), songID)
+		if err != nil {
+			http.Error(w, "failed to check song existence", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("true"))
+		json.NewEncoder(w).Encode(map[string]bool{"exists": exists})
 	})
 
 	// Artist routes

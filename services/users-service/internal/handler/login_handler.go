@@ -15,13 +15,13 @@ import (
 )
 
 type LoginHandler struct {
-	Store  *store.UserStore
+	Repo   *store.UserRepository
 	Config *config.Config
 }
 
-func NewLoginHandler(s *store.UserStore, cfg *config.Config) *LoginHandler {
+func NewLoginHandler(repo *store.UserRepository, cfg *config.Config) *LoginHandler {
 	return &LoginHandler{
-		Store:  s,
+		Repo:   repo,
 		Config: cfg,
 	}
 }
@@ -35,7 +35,8 @@ func (h *LoginHandler) RequestOTP(w http.ResponseWriter, r *http.Request) {
 	var req dto.LoginRequest
 	json.NewDecoder(r.Body).Decode(&req)
 
-	user, err := h.Store.GetByUsername(req.Username)
+	ctx := r.Context()
+	user, err := h.Repo.GetByUsername(ctx, req.Username)
 	if err != nil {
 		http.Error(w, "invalid credentials", http.StatusUnauthorized)
 		return
@@ -56,14 +57,17 @@ func (h *LoginHandler) RequestOTP(w http.ResponseWriter, r *http.Request) {
 		if user.FailedLoginAttempts >= 5 {
 			user.LockedUntil = time.Now().Add(15 * time.Minute)
 		}
+		// Update failed login attempts
+		h.Repo.Update(ctx, user)
 		http.Error(w, "invalid credentials", http.StatusUnauthorized)
 		return
 	}
 
 	user.FailedLoginAttempts = 0
+	h.Repo.Update(ctx, user)
 
 	otp, _ := security.GenerateOTP()
-	h.Store.SetOTP(user.Username, otp)
+	h.Repo.SetOTP(ctx, user.Username, otp)
 	mail.SendOTP(user.Email, otp)
 
 	w.WriteHeader(http.StatusOK)
@@ -81,14 +85,15 @@ func (h *LoginHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	entry, ok := h.Store.GetOTP(req.Username)
+	ctx := r.Context()
+	entry, ok := h.Repo.GetOTP(ctx, req.Username)
 	if !ok || security.IsExpired(entry) || entry.Code != req.OTP {
 		http.Error(w, "invalid OTP", http.StatusUnauthorized)
 		return
 	}
 
 	// Get user to generate token
-	user, err := h.Store.GetByUsername(req.Username)
+	user, err := h.Repo.GetByUsername(ctx, req.Username)
 	if err != nil {
 		http.Error(w, "user not found", http.StatusUnauthorized)
 		return
@@ -101,7 +106,7 @@ func (h *LoginHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.Store.DeleteOTP(req.Username)
+	h.Repo.DeleteOTP(ctx, req.Username)
 
 	// Return token and user info
 	response := dto.LoginResponse{

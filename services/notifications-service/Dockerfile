@@ -10,6 +10,9 @@ RUN go mod download
 # Copy source code
 COPY . .
 
+# Update go.mod and go.sum if needed
+RUN go mod tidy
+
 # Build
 RUN CGO_ENABLED=0 GOOS=linux go build -o /app/main ./cmd/main.go
 

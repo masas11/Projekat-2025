@@ -9,8 +9,28 @@ import (
 	"api-gateway/config"
 )
 
+// enableCORS dodaje CORS headers u odgovor
+func enableCORS(w http.ResponseWriter, r *http.Request) {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		origin = "*"
+	}
+	w.Header().Set("Access-Control-Allow-Origin", origin)
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+	w.Header().Set("Access-Control-Allow-Credentials", "true")
+}
+
 // proxyRequest prosleđuje zahtev ka backend servisu
 func proxyRequest(w http.ResponseWriter, r *http.Request, targetURL string) {
+	// Dodaj CORS headers
+	enableCORS(w, r)
+	
+	// Handle preflight OPTIONS request
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
 	// Čitanje body-ja zahteva
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -26,8 +46,12 @@ func proxyRequest(w http.ResponseWriter, r *http.Request, targetURL string) {
 		return
 	}
 
-	// Kopiranje headers-a
+	// Kopiranje headers-a (ali ne kopiraj Origin i CORS headers ka backend-u)
 	for key, values := range r.Header {
+		// Preskoči CORS headers i Origin pri prosleđivanju ka backend-u
+		if key == "Origin" || key == "Access-Control-Request-Method" || key == "Access-Control-Request-Headers" {
+			continue
+		}
 		for _, value := range values {
 			req.Header.Add(key, value)
 		}

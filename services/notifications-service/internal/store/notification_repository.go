@@ -2,34 +2,50 @@ package store
 
 import (
 	"context"
+	"time"
 
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	"github.com/gocql/gocql"
 
 	"notifications-service/internal/model"
 )
 
 type NotificationRepository struct {
-	collection *mongo.Collection
+	session *gocql.Session
 }
 
-func NewNotificationRepository(db *mongo.Database) *NotificationRepository {
+func NewNotificationRepository(session *gocql.Session) *NotificationRepository {
 	return &NotificationRepository{
-		collection: db.Collection("notifications"),
+		session: session,
 	}
 }
 
 func (r *NotificationRepository) GetByUserID(ctx context.Context, userID string) ([]*model.Notification, error) {
-	findOptions := options.Find().SetSort(bson.D{{Key: "createdAt", Value: -1}})
-	cursor, err := r.collection.Find(ctx, bson.M{"userId": userID}, findOptions)
-	if err != nil {
-		return nil, err
-	}
-	defer cursor.Close(ctx)
+	query := `SELECT id, user_id, type, message, content_id, read, created_at 
+			  FROM notifications 
+			  WHERE user_id = ? 
+			  ORDER BY created_at DESC`
+
+	iter := r.session.Query(query, userID).WithContext(ctx).Iter()
+	defer iter.Close()
 
 	var notifications []*model.Notification
-	if err = cursor.All(ctx, &notifications); err != nil {
+	var id, userIDCol, notifType, message, contentID string
+	var read bool
+	var createdAt time.Time
+
+	for iter.Scan(&id, &userIDCol, &notifType, &message, &contentID, &read, &createdAt) {
+		notifications = append(notifications, &model.Notification{
+			ID:        id,
+			UserID:    userIDCol,
+			Type:      notifType,
+			Message:   message,
+			ContentID: contentID,
+			Read:      read,
+			CreatedAt: createdAt,
+		})
+	}
+
+	if err := iter.Close(); err != nil {
 		return nil, err
 	}
 
@@ -37,6 +53,16 @@ func (r *NotificationRepository) GetByUserID(ctx context.Context, userID string)
 }
 
 func (r *NotificationRepository) Create(ctx context.Context, notification *model.Notification) error {
-	_, err := r.collection.InsertOne(ctx, notification)
-	return err
+	query := `INSERT INTO notifications (id, user_id, type, message, content_id, read, created_at) 
+			  VALUES (?, ?, ?, ?, ?, ?, ?)`
+
+	return r.session.Query(query,
+		notification.ID,
+		notification.UserID,
+		notification.Type,
+		notification.Message,
+		notification.ContentID,
+		notification.Read,
+		notification.CreatedAt,
+	).WithContext(ctx).Exec()
 }

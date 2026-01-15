@@ -91,10 +91,23 @@ services:
       - "8005:8005"
     environment:
       - PORT=8005
-      - MONGODB_URI=mongodb://mongodb:27017
-      - MONGODB_DATABASE=notifications_db
+      - CASSANDRA_HOSTS=cassandra:9042
+      - CASSANDRA_KEYSPACE=notifications_db
     depends_on:
-      - mongodb
+      - cassandra
+    networks:
+      - music-streaming-network
+
+  cassandra:
+    image: cassandra:4.1
+    ports:
+      - "9042:9042"
+    environment:
+      - CASSANDRA_CLUSTER_NAME=MusicStreamingCluster
+      - CASSANDRA_DC=datacenter1
+      - CASSANDRA_RACK=rack1
+    volumes:
+      - cassandra_data:/var/lib/cassandra
     networks:
       - music-streaming-network
 
@@ -126,3 +139,4 @@ networks:
 
 volumes:
   mongodb_data:
+  cassandra_data:

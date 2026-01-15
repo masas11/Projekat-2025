@@ -1,11 +1,12 @@
 package config
 
 import "os"
+import "strings"
 
 type Config struct {
 	Port            string
-	MongoDBURI      string
-	MongoDBDatabase string
+	CassandraHosts  []string
+	CassandraKeyspace string
 }
 
 func Load() *Config {
@@ -14,19 +15,23 @@ func Load() *Config {
 		port = "8005"
 	}
 
-	mongoURI := os.Getenv("MONGODB_URI")
-	if mongoURI == "" {
-		mongoURI = "mongodb://localhost:27017"
+	cassandraHostsStr := os.Getenv("CASSANDRA_HOSTS")
+	if cassandraHostsStr == "" {
+		cassandraHostsStr = "localhost:9042"
+	}
+	cassandraHosts := strings.Split(cassandraHostsStr, ",")
+	for i, host := range cassandraHosts {
+		cassandraHosts[i] = strings.TrimSpace(host)
 	}
 
-	mongoDB := os.Getenv("MONGODB_DATABASE")
-	if mongoDB == "" {
-		mongoDB = "notifications_db"
+	keyspace := os.Getenv("CASSANDRA_KEYSPACE")
+	if keyspace == "" {
+		keyspace = "notifications_db"
 	}
 
 	return &Config{
-		Port:            port,
-		MongoDBURI:      mongoURI,
-		MongoDBDatabase: mongoDB,
+		Port:              port,
+		CassandraHosts:    cassandraHosts,
+		CassandraKeyspace: keyspace,
 	}
 }

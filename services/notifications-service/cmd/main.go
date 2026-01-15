@@ -64,16 +64,16 @@ func initSampleNotifications(ctx context.Context, repo *store.NotificationReposi
 func main() {
 	cfg := config.Load()
 
-	// Initialize MongoDB connection
-	dbStore, err := store.NewMongoDBStore(cfg.MongoDBURI, cfg.MongoDBDatabase)
+	// Initialize Cassandra connection
+	cassandraStore, err := store.NewCassandraStore(cfg.CassandraHosts, cfg.CassandraKeyspace)
 	if err != nil {
-		log.Fatal("Failed to connect to MongoDB:", err)
+		log.Fatal("Failed to connect to Cassandra:", err)
 	}
-	defer dbStore.Close()
-	log.Println("Connected to MongoDB")
+	defer cassandraStore.Close()
+	log.Println("Connected to Cassandra")
 
 	// Initialize repository
-	notificationRepo := store.NewNotificationRepository(dbStore.Database)
+	notificationRepo := store.NewNotificationRepository(cassandraStore.Session)
 
 	// Initialize sample notifications
 	ctx := context.Background()

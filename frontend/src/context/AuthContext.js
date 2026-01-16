@@ -43,7 +43,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   const isAdmin = () => {
-    return user && user.role === 'admin';
+    return user && user.role === 'ADMIN';
   };
 
   const value = {

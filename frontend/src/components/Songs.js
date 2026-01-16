@@ -6,15 +6,17 @@ import api from '../services/api';
 const Songs = () => {
   const [songs, setSongs] = useState([]);
   const [albums, setAlbums] = useState([]);
+  const [artists, setArtists] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
+  const [editingSong, setEditingSong] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
     duration: '',
     genre: '',
     albumID: '',
-    artistIDs: '',
+    selectedArtistIds: [],
   });
   const { isAdmin } = useAuth();
   const navigate = useNavigate();
@@ -22,6 +24,7 @@ const Songs = () => {
   useEffect(() => {
     loadSongs();
     loadAlbums();
+    loadArtists();
   }, []);
 
   const loadSongs = async () => {
@@ -44,10 +47,28 @@ const Songs = () => {
     }
   };
 
+  const loadArtists = async () => {
+    try {
+      const data = await api.getArtists();
+      setArtists(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Error loading artists:', err);
+    }
+  };
+
   const handleChange = (e) => {
+    const { name, value } = e.target;
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value,
+      [name]: value,
+    });
+  };
+
+  const handleArtistSelect = (e) => {
+    const selectedOptions = Array.from(e.target.selectedOptions, option => option.value);
+    setFormData({
+      ...formData,
+      selectedArtistIds: selectedOptions,
     });
   };
 
@@ -59,18 +80,41 @@ const Songs = () => {
       name: formData.name,
       duration: parseInt(formData.duration),
       genre: formData.genre,
-      albumID: formData.albumID,
-      artistIDs: formData.artistIDs.split(',').map(id => id.trim()).filter(id => id),
+      albumId: formData.albumID,
+      artistIds: formData.selectedArtistIds,
     };
 
     try {
-      await api.createSong(songData);
+      if (editingSong) {
+        await api.updateSong(editingSong.id, songData);
+      } else {
+        await api.createSong(songData);
+      }
       setShowForm(false);
-      setFormData({ name: '', duration: '', genre: '', albumID: '', artistIDs: '' });
+      setEditingSong(null);
+      setFormData({ name: '', duration: '', genre: '', albumID: '', selectedArtistIds: [] });
       loadSongs();
     } catch (err) {
       setError(err.message || 'Greška pri čuvanju pesme');
     }
+  };
+
+  const handleEdit = (song) => {
+    setEditingSong(song);
+    setFormData({
+      name: song.name,
+      duration: song.duration || '',
+      genre: song.genre || '',
+      albumID: song.albumId || song.albumID || '',
+      selectedArtistIds: song.artistIds || song.artistIDs || [],
+    });
+    setShowForm(true);
+  };
+
+  const handleCancel = () => {
+    setShowForm(false);
+    setEditingSong(null);
+    setFormData({ name: '', duration: '', genre: '', albumID: '', selectedArtistIds: [] });
   };
 
   const formatDuration = (seconds) => {
@@ -129,30 +173,61 @@ const Songs = () => {
               />
             </div>
             <div className="form-group">
-              <label>ID albuma:</label>
-              <input
-                type="text"
+              <label>Album:</label>
+              <select
                 name="albumID"
                 value={formData.albumID}
                 onChange={handleChange}
                 required
-              />
+                style={{ 
+                  width: '100%', 
+                  padding: '8px', 
+                  border: '1px solid #ddd',
+                  borderRadius: '4px'
+                }}
+              >
+                <option value="">Izaberite album</option>
+                {albums.map((album) => (
+                  <option key={album.id} value={album.id}>
+                    {album.name}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="form-group">
-              <label>ID izvođača (odvojeni zarezom):</label>
-              <input
-                type="text"
-                name="artistIDs"
-                value={formData.artistIDs}
-                onChange={handleChange}
-                placeholder="id1, id2, id3"
+              <label>Izvođači (držite Ctrl/Cmd za višestruki izbor):</label>
+              <select
+                name="selectedArtistIds"
+                multiple
+                value={formData.selectedArtistIds}
+                onChange={handleArtistSelect}
                 required
-              />
+                style={{ 
+                  width: '100%', 
+                  padding: '8px', 
+                  minHeight: '100px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px'
+                }}
+              >
+                {artists.map((artist) => (
+                  <option key={artist.id} value={artist.id}>
+                    {artist.name}
+                  </option>
+                ))}
+              </select>
+              {formData.selectedArtistIds.length > 0 && (
+                <p style={{ marginTop: '5px', fontSize: '0.9em', color: '#666' }}>
+                  Izabrano: {formData.selectedArtistIds.length} izvođač(a)
+                </p>
+              )}
             </div>
             {error && <div className="error">{error}</div>}
             <div style={{ display: 'flex', gap: '10px' }}>
-              <button type="submit" className="btn btn-primary">Dodaj</button>
-              <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>
+              <button type="submit" className="btn btn-primary">
+                {editingSong ? 'Ažuriraj' : 'Dodaj'}
+              </button>
+              <button type="button" className="btn btn-secondary" onClick={handleCancel}>
                 Otkaži
               </button>
             </div>
@@ -174,6 +249,35 @@ const Songs = () => {
                 <h3>{song.name}</h3>
                 {song.duration && <p>Trajanje: {formatDuration(song.duration)}</p>}
                 {song.genre && <span className="genre-tag">{song.genre}</span>}
+                {isAdmin() && (
+                  <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                    <button
+                      className="btn btn-secondary"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEdit(song);
+                      }}
+                    >
+                      Izmeni
+                    </button>
+                    <button
+                      className="btn btn-danger"
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        if (window.confirm(`Da li ste sigurni da želite da obrišete pesmu "${song.name}"?`)) {
+                          try {
+                            await api.deleteSong(song.id);
+                            loadSongs();
+                          } catch (err) {
+                            setError(err.message || 'Greška pri brisanju pesme');
+                          }
+                        }
+                      }}
+                    >
+                      Obriši
+                    </button>
+                  </div>
+                )}
               </div>
             ))
           )}

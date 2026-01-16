@@ -142,6 +142,85 @@ func (h *AlbumHandler) GetAlbumsByArtist(w http.ResponseWriter, r *http.Request)
 	json.NewEncoder(w).Encode(responses)
 }
 
+func (h *AlbumHandler) UpdateAlbum(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	id := extractAlbumID(r.URL.Path)
+	if id == "" {
+		http.Error(w, "album ID is required", http.StatusBadRequest)
+		return
+	}
+
+	var req dto.UpdateAlbumRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	// Validation
+	if req.Name == "" {
+		http.Error(w, "name is required", http.StatusBadRequest)
+		return
+	}
+	if req.Genre == "" {
+		http.Error(w, "genre is required", http.StatusBadRequest)
+		return
+	}
+	if len(req.ArtistIDs) == 0 {
+		http.Error(w, "at least one artist ID is required", http.StatusBadRequest)
+		return
+	}
+
+	// Get existing album to preserve ID and timestamps
+	existingAlbum, err := h.Repo.GetByID(r.Context(), id)
+	if err != nil {
+		http.Error(w, "album not found", http.StatusNotFound)
+		return
+	}
+
+	// Update fields
+	existingAlbum.Name = req.Name
+	existingAlbum.ReleaseDate = req.ReleaseDate
+	existingAlbum.Genre = req.Genre
+	existingAlbum.ArtistIDs = req.ArtistIDs
+
+	if err := h.Repo.Update(r.Context(), id, existingAlbum); err != nil {
+		http.Error(w, "failed to update album: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(toAlbumResponse(existingAlbum))
+}
+
+func (h *AlbumHandler) DeleteAlbum(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	id := extractAlbumID(r.URL.Path)
+	if id == "" {
+		http.Error(w, "album ID is required", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.Repo.Delete(r.Context(), id); err != nil {
+		if err.Error() == "album not found" {
+			http.Error(w, "album not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "failed to delete album: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func toAlbumResponse(album *model.Album) *dto.AlbumResponse {
 	return &dto.AlbumResponse{
 		ID:          album.ID,

@@ -160,16 +160,33 @@ const Artists = () => {
                   </div>
                 )}
                 {isAdmin() && (
-                  <button
-                    className="btn btn-secondary"
-                    style={{ marginTop: '10px' }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleEdit(artist);
-                    }}
-                  >
-                    Izmeni
-                  </button>
+                  <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                    <button
+                      className="btn btn-secondary"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEdit(artist);
+                      }}
+                    >
+                      Izmeni
+                    </button>
+                    <button
+                      className="btn btn-danger"
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        if (window.confirm(`Da li ste sigurni da želite da obrišete izvođača "${artist.name}"?`)) {
+                          try {
+                            await api.deleteArtist(artist.id);
+                            loadArtists();
+                          } catch (err) {
+                            setError(err.message || 'Greška pri brisanju izvođača');
+                          }
+                        }
+                      }}
+                    >
+                      Obriši
+                    </button>
+                  </div>
                 )}
               </div>
             ))

@@ -59,6 +59,8 @@ func main() {
 	mux.HandleFunc("/albums/by-artist", albumHandler.GetAlbumsByArtist)
 
 	// GET /albums/{id} - get album by ID (public)
+	// PUT /albums/{id} - update album (admin only, requires JWT)
+	// DELETE /albums/{id} - delete album (admin only, requires JWT)
 	mux.HandleFunc("/albums/", func(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimPrefix(r.URL.Path, "/albums/")
 		if path == "" {
@@ -69,6 +71,10 @@ func main() {
 		switch r.Method {
 		case http.MethodGet:
 			albumHandler.GetAlbum(w, r)
+		case http.MethodPut:
+			middleware.JWTAuth(cfg)(middleware.AdminOnly(albumHandler.UpdateAlbum))(w, r)
+		case http.MethodDelete:
+			middleware.JWTAuth(cfg)(middleware.AdminOnly(albumHandler.DeleteAlbum))(w, r)
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
@@ -92,6 +98,8 @@ func main() {
 	mux.HandleFunc("/songs/by-album", songHandler.GetSongsByAlbum)
 
 	// GET /songs/{id} - get song by ID (public)
+	// PUT /songs/{id} - update song (admin only, requires JWT)
+	// DELETE /songs/{id} - delete song (admin only, requires JWT)
 	mux.HandleFunc("/songs/", func(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimPrefix(r.URL.Path, "/songs/")
 		if path == "" {
@@ -102,6 +110,10 @@ func main() {
 		switch r.Method {
 		case http.MethodGet:
 			songHandler.GetSong(w, r)
+		case http.MethodPut:
+			middleware.JWTAuth(cfg)(middleware.AdminOnly(songHandler.UpdateSong))(w, r)
+		case http.MethodDelete:
+			middleware.JWTAuth(cfg)(middleware.AdminOnly(songHandler.DeleteSong))(w, r)
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
@@ -141,6 +153,8 @@ func main() {
 	})
 
 	// GET /artists/{id} - get artist by ID (public)
+	// PUT /artists/{id} - update artist (admin only, requires JWT)
+	// DELETE /artists/{id} - delete artist (admin only, requires JWT)
 	mux.HandleFunc("/artists/", func(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimPrefix(r.URL.Path, "/artists/")
 		if path == "" {
@@ -154,6 +168,9 @@ func main() {
 		case http.MethodPut:
 			// PUT /artists/{id} - update artist (admin only, requires JWT)
 			middleware.JWTAuth(cfg)(middleware.AdminOnly(artistHandler.UpdateArtist))(w, r)
+		case http.MethodDelete:
+			// DELETE /artists/{id} - delete artist (admin only, requires JWT)
+			middleware.JWTAuth(cfg)(middleware.AdminOnly(artistHandler.DeleteArtist))(w, r)
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}

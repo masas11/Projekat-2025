@@ -72,3 +72,37 @@ func (r *AlbumRepository) GetAll(ctx context.Context) ([]*model.Album, error) {
 
 	return albums, nil
 }
+
+func (r *AlbumRepository) Update(ctx context.Context, id string, album *model.Album) error {
+	album.UpdatedAt = time.Now()
+	
+	update := bson.M{
+		"$set": bson.M{
+			"name":        album.Name,
+			"releaseDate": album.ReleaseDate,
+			"genre":       album.Genre,
+			"artistIds":   album.ArtistIDs,
+			"updatedAt":   album.UpdatedAt,
+		},
+	}
+
+	result, err := r.collection.UpdateOne(ctx, bson.M{"_id": id}, update)
+	if err != nil {
+		return err
+	}
+	if result.MatchedCount == 0 {
+		return errors.New("album not found")
+	}
+	return nil
+}
+
+func (r *AlbumRepository) Delete(ctx context.Context, id string) error {
+	result, err := r.collection.DeleteOne(ctx, bson.M{"_id": id})
+	if err != nil {
+		return err
+	}
+	if result.DeletedCount == 0 {
+		return errors.New("album not found")
+	}
+	return nil
+}

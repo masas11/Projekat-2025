@@ -9,11 +9,12 @@ const Albums = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
+  const [editingAlbum, setEditingAlbum] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
     releaseDate: '',
     genre: '',
-    artistIDs: '',
+    selectedArtistIds: [],
   });
   const { isAdmin } = useAuth();
   const navigate = useNavigate();
@@ -44,31 +45,62 @@ const Albums = () => {
   };
 
   const handleChange = (e) => {
+    const { name, value } = e.target;
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value,
+      [name]: value,
+    });
+  };
+
+  const handleArtistSelect = (e) => {
+    const selectedOptions = Array.from(e.target.selectedOptions, option => option.value);
+    setFormData({
+      ...formData,
+      selectedArtistIds: selectedOptions,
     });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError();
+    setError('');
 
     const albumData = {
       name: formData.name,
-      releaseDate: formData.releaseDate,
+      releaseDate: formData.releaseDate ? new Date(formData.releaseDate).toISOString() : new Date().toISOString(),
       genre: formData.genre,
-      artistIDs: formData.artistIDs.split(',').map(id => id.trim()).filter(id => id),
+      artistIds: formData.selectedArtistIds,
     };
 
     try {
-      await api.createAlbum(albumData);
+      if (editingAlbum) {
+        await api.updateAlbum(editingAlbum.id, albumData);
+      } else {
+        await api.createAlbum(albumData);
+      }
       setShowForm(false);
-      setFormData({ name: '', releaseDate: '', genre: '', artistIDs: '' });
+      setEditingAlbum(null);
+      setFormData({ name: '', releaseDate: '', genre: '', selectedArtistIds: [] });
       loadAlbums();
     } catch (err) {
       setError(err.message || 'Greška pri čuvanju albuma');
     }
+  };
+
+  const handleEdit = (album) => {
+    setEditingAlbum(album);
+    setFormData({
+      name: album.name,
+      releaseDate: album.releaseDate ? new Date(album.releaseDate).toISOString().split('T')[0] : '',
+      genre: album.genre || '',
+      selectedArtistIds: album.artistIds || album.artistIDs || [],
+    });
+    setShowForm(true);
+  };
+
+  const handleCancel = () => {
+    setShowForm(false);
+    setEditingAlbum(null);
+    setFormData({ name: '', releaseDate: '', genre: '', selectedArtistIds: [] });
   };
 
   if (loading) {
@@ -119,20 +151,39 @@ const Albums = () => {
               />
             </div>
             <div className="form-group">
-              <label>ID izvođača (odvojeni zarezom):</label>
-              <input
-                type="text"
-                name="artistIDs"
-                value={formData.artistIDs}
-                onChange={handleChange}
-                placeholder="id1, id2, id3"
+              <label>Izvođači (držite Ctrl/Cmd za višestruki izbor):</label>
+              <select
+                name="selectedArtistIds"
+                multiple
+                value={formData.selectedArtistIds}
+                onChange={handleArtistSelect}
                 required
-              />
+                style={{ 
+                  width: '100%', 
+                  padding: '8px', 
+                  minHeight: '100px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px'
+                }}
+              >
+                {artists.map((artist) => (
+                  <option key={artist.id} value={artist.id}>
+                    {artist.name}
+                  </option>
+                ))}
+              </select>
+              {formData.selectedArtistIds.length > 0 && (
+                <p style={{ marginTop: '5px', fontSize: '0.9em', color: '#666' }}>
+                  Izabrano: {formData.selectedArtistIds.length} izvođač(a)
+                </p>
+              )}
             </div>
             {error && <div className="error">{error}</div>}
             <div style={{ display: 'flex', gap: '10px' }}>
-              <button type="submit" className="btn btn-primary">Dodaj</button>
-              <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>
+              <button type="submit" className="btn btn-primary">
+                {editingAlbum ? 'Ažuriraj' : 'Dodaj'}
+              </button>
+              <button type="button" className="btn btn-secondary" onClick={handleCancel}>
                 Otkaži
               </button>
             </div>
@@ -157,6 +208,35 @@ const Albums = () => {
                   <p style={{ marginTop: '5px' }}>
                     Datum izdavanja: {new Date(album.releaseDate).toLocaleDateString()}
                   </p>
+                )}
+                {isAdmin() && (
+                  <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                    <button
+                      className="btn btn-secondary"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEdit(album);
+                      }}
+                    >
+                      Izmeni
+                    </button>
+                    <button
+                      className="btn btn-danger"
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        if (window.confirm(`Da li ste sigurni da želite da obrišete album "${album.name}"?`)) {
+                          try {
+                            await api.deleteAlbum(album.id);
+                            loadAlbums();
+                          } catch (err) {
+                            setError(err.message || 'Greška pri brisanju albuma');
+                          }
+                        }
+                      }}
+                    >
+                      Obriši
+                    </button>
+                  </div>
                 )}
               </div>
             ))

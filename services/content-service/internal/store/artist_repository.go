@@ -79,3 +79,14 @@ func (r *ArtistRepository) GetAll(ctx context.Context) ([]*model.Artist, error) 
 
 	return artists, nil
 }
+
+func (r *ArtistRepository) Delete(ctx context.Context, id string) error {
+	result, err := r.collection.DeleteOne(ctx, bson.M{"_id": id})
+	if err != nil {
+		return err
+	}
+	if result.DeletedCount == 0 {
+		return errors.New("artist not found")
+	}
+	return nil
+}

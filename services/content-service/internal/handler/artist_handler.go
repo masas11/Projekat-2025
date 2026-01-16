@@ -169,3 +169,27 @@ func (h *ArtistHandler) GetAllArtists(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(responses)
 }
+
+func (h *ArtistHandler) DeleteArtist(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	id := extractArtistID(r.URL.Path)
+	if id == "" {
+		http.Error(w, "artist ID is required", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.Repo.Delete(r.Context(), id); err != nil {
+		if err.Error() == "artist not found" {
+			http.Error(w, "artist not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "failed to delete artist: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}

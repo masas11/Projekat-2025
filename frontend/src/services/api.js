@@ -111,6 +111,12 @@ class ApiService {
     });
   }
 
+  async deleteArtist(id) {
+    return this.request(`/api/content/artists/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
   // Content Service - Albums
   async getAlbums() {
     return this.request('/api/content/albums');
@@ -131,6 +137,19 @@ class ApiService {
     });
   }
 
+  async updateAlbum(id, albumData) {
+    return this.request(`/api/content/albums/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(albumData),
+    });
+  }
+
+  async deleteAlbum(id) {
+    return this.request(`/api/content/albums/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
   // Content Service - Songs
   async getSongs() {
     return this.request('/api/content/songs');
@@ -148,6 +167,19 @@ class ApiService {
     return this.request('/api/content/songs', {
       method: 'POST',
       body: JSON.stringify(songData),
+    });
+  }
+
+  async updateSong(id, songData) {
+    return this.request(`/api/content/songs/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(songData),
+    });
+  }
+
+  async deleteSong(id) {
+    return this.request(`/api/content/songs/${id}`, {
+      method: 'DELETE',
     });
   }
 

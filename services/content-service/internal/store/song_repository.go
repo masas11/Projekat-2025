@@ -81,3 +81,38 @@ func (r *SongRepository) Exists(ctx context.Context, id string) (bool, error) {
 	}
 	return count > 0, nil
 }
+
+func (r *SongRepository) Update(ctx context.Context, id string, song *model.Song) error {
+	song.UpdatedAt = time.Now().Format(time.RFC3339)
+	
+	update := bson.M{
+		"$set": bson.M{
+			"name":      song.Name,
+			"duration":  song.Duration,
+			"genre":     song.Genre,
+			"albumId":   song.AlbumID,
+			"artistIds": song.ArtistIDs,
+			"updatedAt": song.UpdatedAt,
+		},
+	}
+
+	result, err := r.collection.UpdateOne(ctx, bson.M{"_id": id}, update)
+	if err != nil {
+		return err
+	}
+	if result.MatchedCount == 0 {
+		return errors.New("song not found")
+	}
+	return nil
+}
+
+func (r *SongRepository) Delete(ctx context.Context, id string) error {
+	result, err := r.collection.DeleteOne(ctx, bson.M{"_id": id})
+	if err != nil {
+		return err
+	}
+	if result.DeletedCount == 0 {
+		return errors.New("song not found")
+	}
+	return nil
+}

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 
@@ -85,6 +85,9 @@ const Login = () => {
                 placeholder="123456"
                 required
               />
+              <small style={{ color: '#666', fontSize: '12px' }}>
+                Proverite konzolu servera gde vidite OTP kod
+              </small>
             </div>
             {error && <div className="error">{error}</div>}
             <div style={{ display: 'flex', gap: '10px' }}>
@@ -105,6 +108,12 @@ const Login = () => {
             </div>
           </form>
         )}
+        <div style={{ marginTop: '15px', textAlign: 'center', fontSize: '14px' }}>
+          <Link to="/forgot-password" style={{ marginRight: '15px' }}>
+            Zaboravljena lozinka?
+          </Link>
+          <Link to="/recover-account">Povraćaj naloga (Magic Link)</Link>
+        </div>
       </div>
     </div>
   );

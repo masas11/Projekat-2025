@@ -81,10 +81,43 @@ class ApiService {
     });
   }
 
-  async resetPassword(data) {
+  async requestPasswordReset(email) {
+    return this.request('/api/users/password/reset/request', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+  }
+
+  async resetPassword(token, newPassword) {
     return this.request('/api/users/password/reset', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify({ token, newPassword }),
+    });
+  }
+
+  async verifyEmail(token) {
+    // Token is already URL decoded when read from searchParams
+    // Use URLSearchParams to properly encode the token without double-encoding
+    const params = new URLSearchParams({ token });
+    return this.request(`/api/users/verify-email?${params.toString()}`);
+  }
+
+  async requestMagicLink(email) {
+    return this.request('/api/users/recover/request', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+  }
+
+  async verifyMagicLink(token) {
+    // Use URLSearchParams to properly encode the token
+    const params = new URLSearchParams({ token });
+    return this.request(`/api/users/recover/verify?${params.toString()}`);
+  }
+
+  async logout() {
+    return this.request('/api/users/logout', {
+      method: 'POST',
     });
   }
 

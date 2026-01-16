@@ -56,10 +56,7 @@ const Register = () => {
 
     try {
       await api.register(formData);
-      setSuccess('Uspešna registracija! Sada se možete prijaviti.');
-      setTimeout(() => {
-        navigate('/login');
-      }, 2000);
+      setSuccess('Uspešna registracija! Email za verifikaciju je poslat. Proverite svoj email i kliknite na link za verifikaciju.');
     } catch (err) {
       setError(err.message || 'Greška pri registraciji');
     } finally {

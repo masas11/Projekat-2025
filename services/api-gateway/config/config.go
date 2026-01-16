@@ -4,6 +4,7 @@ import "os"
 
 type Config struct {
 	Port                string
+	JWTSecret           string
 	UsersServiceURL     string
 	ContentServiceURL   string
 	NotificationsServiceURL string
@@ -30,8 +31,14 @@ func Load() *Config {
 		notificationsURL = "http://localhost:8005"
 	}
 
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		jwtSecret = "your-secret-key-change-in-production" // Default, should match users-service
+	}
+
 	return &Config{
 		Port:                port,
+		JWTSecret:           jwtSecret,
 		UsersServiceURL:     usersURL,
 		ContentServiceURL:   contentURL,
 		NotificationsServiceURL: notificationsURL,

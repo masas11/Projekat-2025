@@ -6,7 +6,11 @@ type ChangePasswordRequest struct {
 	NewPassword string `json:"newPassword"`
 }
 
+type PasswordResetRequest struct {
+	Email string `json:"email"`
+}
+
 type ResetPasswordRequest struct {
-	Username    string `json:"username"`
+	Token       string `json:"token"`
 	NewPassword string `json:"newPassword"`
 }

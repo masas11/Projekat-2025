@@ -42,6 +42,12 @@ func (h *LoginHandler) RequestOTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check if email is verified
+	if !user.Verified {
+		http.Error(w, "email not verified", http.StatusForbidden)
+		return
+	}
+
 	if time.Now().Before(user.LockedUntil) {
 		http.Error(w, "account locked", http.StatusForbidden)
 		return
@@ -122,4 +128,20 @@ func (h *LoginHandler) VerifyOTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
+}
+
+// Logout handles user logout (mainly for audit/logging purposes since JWT is stateless)
+func (h *LoginHandler) Logout(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// With stateless JWT, logout is primarily a client-side operation
+	// This endpoint can be used for audit logging or token blacklisting in the future
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{
+		"message": "logged out successfully",
+	})
 }

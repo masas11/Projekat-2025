@@ -5,6 +5,12 @@ import Navbar from './components/Navbar';
 import Home from './components/Home';
 import Login from './components/Login';
 import Register from './components/Register';
+import VerifyEmail from './components/VerifyEmail';
+import ForgotPassword from './components/ForgotPassword';
+import ResetPassword from './components/ResetPassword';
+import ChangePassword from './components/ChangePassword';
+import RecoverAccount from './components/RecoverAccount';
+import VerifyMagicLink from './components/VerifyMagicLink';
 import Artists from './components/Artists';
 import ArtistDetail from './components/ArtistDetail';
 import Albums from './components/Albums';
@@ -25,6 +31,19 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/verify-email" element={<VerifyEmail />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/recover-account" element={<RecoverAccount />} />
+            <Route path="/verify-magic-link" element={<VerifyMagicLink />} />
+            <Route
+              path="/change-password"
+              element={
+                <ProtectedRoute>
+                  <ChangePassword />
+                </ProtectedRoute>
+              }
+            />
             <Route path="/artists" element={<Artists />} />
             <Route path="/artists/:id" element={<ArtistDetail />} />
             <Route path="/albums" element={<Albums />} />

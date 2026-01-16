@@ -1,4 +1,5 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
+import { setEncryptedItem, getEncryptedItem, removeEncryptedItem } from '../utils/encryption';
 
 const AuthContext = createContext();
 
@@ -15,30 +16,32 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check if user is logged in from localStorage
-    const token = localStorage.getItem('token');
-    const userData = localStorage.getItem('user');
+    // Check if user is logged in from encrypted localStorage
+    const token = localStorage.getItem('token'); // Token is stored as-is for API requests
+    const userData = getEncryptedItem('user'); // User data is encrypted
     
     if (token && userData) {
       try {
-        setUser(JSON.parse(userData));
+        setUser(userData);
       } catch (e) {
         localStorage.removeItem('token');
-        localStorage.removeItem('user');
+        removeEncryptedItem('user');
       }
     }
     setLoading(false);
   }, []);
 
   const login = (userData, token) => {
+    // Store token as-is (JWT tokens are already encoded)
     localStorage.setItem('token', token);
-    localStorage.setItem('user', JSON.stringify(userData));
+    // Encrypt user data for integrity and basic protection
+    setEncryptedItem('user', userData);
     setUser(userData);
   };
 
   const logout = () => {
     localStorage.removeItem('token');
-    localStorage.removeItem('user');
+    removeEncryptedItem('user');
     setUser(null);
   };
 

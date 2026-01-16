@@ -11,6 +11,7 @@ import (
 
 	"users-service/config"
 	"users-service/internal/handler"
+	"users-service/internal/middleware"
 	"users-service/internal/model"
 	"users-service/internal/store"
 )
@@ -70,7 +71,9 @@ func main() {
 	// inicijalizacija handler-a
 	registerHandler := handler.NewRegisterHandler(userRepo)
 	loginHandler := handler.NewLoginHandler(userRepo, cfg)
-	passwordHandler := handler.NewPasswordHandler(userRepo)
+	passwordHandler := handler.NewPasswordHandler(userRepo, cfg)
+	magicLinkHandler := handler.NewMagicLinkHandler(userRepo, cfg)
+	verificationHandler := handler.NewVerificationHandler(userRepo)
 
 	// router
 	mux := http.NewServeMux()
@@ -81,16 +84,28 @@ func main() {
 		w.Write([]byte("users-service is running"))
 	})
 
-	// register endpoint
-	mux.HandleFunc("/register", registerHandler.Register)
+	// Rate limiting: 10 requests per minute for sensitive endpoints
+	rateLimit := middleware.RateLimit(10, 1*time.Minute)
 
-	// login / OTP endpoints
-	mux.HandleFunc("/login/request-otp", loginHandler.RequestOTP)
-	mux.HandleFunc("/login/verify-otp", loginHandler.VerifyOTP)
+	// register endpoint (rate limited)
+	mux.HandleFunc("/register", rateLimit(registerHandler.Register))
 
-	// password endpoints
-	mux.HandleFunc("/password/change", passwordHandler.ChangePassword)
-	mux.HandleFunc("/password/reset", passwordHandler.ResetPassword)
+	// login / OTP endpoints (rate limited)
+	mux.HandleFunc("/login/request-otp", rateLimit(loginHandler.RequestOTP))
+	mux.HandleFunc("/login/verify-otp", rateLimit(loginHandler.VerifyOTP))
+	mux.HandleFunc("/logout", rateLimit(loginHandler.Logout))
+
+	// password endpoints (rate limited)
+	mux.HandleFunc("/password/change", rateLimit(passwordHandler.ChangePassword))
+	mux.HandleFunc("/password/reset/request", rateLimit(passwordHandler.RequestPasswordReset))
+	mux.HandleFunc("/password/reset", rateLimit(passwordHandler.ResetPassword))
+
+	// email verification endpoint (rate limited)
+	mux.HandleFunc("/verify-email", rateLimit(verificationHandler.VerifyEmail))
+
+	// magic link endpoints (account recovery) (rate limited)
+	mux.HandleFunc("/recover/request", rateLimit(magicLinkHandler.RequestMagicLink))
+	mux.HandleFunc("/recover/verify", rateLimit(magicLinkHandler.VerifyMagicLink))
 
 	log.Println("Users service running on port", cfg.Port)
 	log.Fatal(http.ListenAndServe(":"+cfg.Port, mux))

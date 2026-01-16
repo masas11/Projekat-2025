@@ -7,6 +7,7 @@ type Config struct {
 	JWTSecret       string
 	MongoDBURI      string
 	MongoDBDatabase string
+	BaseURL         string
 }
 
 func Load() *Config {
@@ -30,10 +31,16 @@ func Load() *Config {
 		mongoDB = "users_db"
 	}
 
+	baseURL := os.Getenv("BASE_URL")
+	if baseURL == "" {
+		baseURL = "http://localhost:8081" // Default to API Gateway URL
+	}
+
 	return &Config{
 		Port:            port,
 		JWTSecret:       jwtSecret,
 		MongoDBURI:      mongoURI,
 		MongoDBDatabase: mongoDB,
+		BaseURL:         baseURL,
 	}
 }

@@ -234,12 +234,19 @@ func main() {
 		proxyRequest(w, r, cfg.NotificationsServiceURL+"/health")
 	})
 
-	// GET /api/notifications?userId={id} - get notifications for user (requires auth)
+	// GET /api/notifications - get notifications for authenticated user (requires auth)
+	// userId is extracted from JWT token, not from query parameter for security
 	mux.HandleFunc("/api/notifications", globalRateLimit(middleware.RequireAuth(cfg)(func(w http.ResponseWriter, r *http.Request) {
-		query := ""
-		if r.URL.RawQuery != "" {
-			query = "?" + r.URL.RawQuery
+		// Get userId from JWT token (set by RequireAuth middleware)
+		claims, ok := r.Context().Value(middleware.UserContextKey).(*middleware.UserClaims)
+		if !ok || claims == nil {
+			enableCORS(w, r)
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
 		}
+		
+		// Use userId from JWT token, ignore any userId in query parameters for security
+		query := "?userId=" + claims.UserID
 		proxyRequest(w, r, cfg.NotificationsServiceURL+"/notifications"+query)
 	})))
 

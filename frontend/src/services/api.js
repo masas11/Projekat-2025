@@ -217,8 +217,9 @@ class ApiService {
   }
 
   // Notifications Service
-  async getNotifications(userId) {
-    return this.request(`/api/notifications?userId=${userId}`);
+  // userId is automatically extracted from JWT token by API Gateway
+  async getNotifications() {
+    return this.request('/api/notifications');
   }
 }
 

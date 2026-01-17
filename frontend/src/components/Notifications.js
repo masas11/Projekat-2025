@@ -1,29 +1,27 @@
 import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 
 const Notifications = () => {
-  const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const userId = searchParams.get('userId') || (user && user.id);
-
   useEffect(() => {
-    if (userId) {
+    if (user && user.id) {
       loadNotifications();
     } else {
-      setError('Korisnički ID je potreban');
+      setError('Morate biti prijavljeni da biste videli notifikacije');
       setLoading(false);
     }
-  }, [userId]);
+  }, [user]);
 
   const loadNotifications = async () => {
     try {
-      const data = await api.getNotifications(userId);
+      // API Gateway će automatski koristiti userId iz JWT tokena
+      // Ne treba više slati userId u query parametru
+      const data = await api.getNotifications();
       setNotifications(Array.isArray(data) ? data : []);
     } catch (err) {
       setError(err.message || 'Greška pri učitavanju notifikacija');

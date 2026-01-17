@@ -16,7 +16,7 @@ import (
 	"users-service/internal/store"
 )
 
-func initAdminUser(ctx context.Context, userRepo *store.UserRepository) {
+func initAdminUser(ctx context.Context, userRepo *store.UserRepository, cfg *config.Config) {
 	// Check if admin already exists
 	admin, err := userRepo.GetByUsername(ctx, "admin")
 	if err == nil && admin != nil {
@@ -38,7 +38,7 @@ func initAdminUser(ctx context.Context, userRepo *store.UserRepository) {
 		Role:              "ADMIN",
 		Verified:          true,
 		PasswordChangedAt: now,
-		PasswordExpiresAt: now.Add(60 * 24 * time.Hour),
+		PasswordExpiresAt: now.Add(time.Duration(cfg.PasswordExpirationDays) * 24 * time.Hour),
 		CreatedAt:         now,
 	}
 
@@ -66,10 +66,10 @@ func main() {
 
 	// Initialize admin user
 	ctx := context.Background()
-	initAdminUser(ctx, userRepo)
+	initAdminUser(ctx, userRepo, cfg)
 
 	// inicijalizacija handler-a
-	registerHandler := handler.NewRegisterHandler(userRepo)
+	registerHandler := handler.NewRegisterHandler(userRepo, cfg)
 	loginHandler := handler.NewLoginHandler(userRepo, cfg)
 	passwordHandler := handler.NewPasswordHandler(userRepo, cfg)
 	magicLinkHandler := handler.NewMagicLinkHandler(userRepo, cfg)

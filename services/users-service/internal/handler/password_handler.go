@@ -67,7 +67,7 @@ func (h *PasswordHandler) ChangePassword(w http.ResponseWriter, r *http.Request)
 	hash, _ := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
 	user.PasswordHash = string(hash)
 	user.PasswordChangedAt = time.Now()
-	user.PasswordExpiresAt = time.Now().Add(60 * 24 * time.Hour)
+	user.PasswordExpiresAt = time.Now().Add(time.Duration(h.Config.PasswordExpirationDays) * 24 * time.Hour)
 
 	if err := h.Repo.Update(ctx, user); err != nil {
 		http.Error(w, "failed to update password", http.StatusInternalServerError)
@@ -180,7 +180,7 @@ func (h *PasswordHandler) ResetPassword(w http.ResponseWriter, r *http.Request) 
 	hash, _ := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
 	user.PasswordHash = string(hash)
 	user.PasswordChangedAt = time.Now()
-	user.PasswordExpiresAt = time.Now().Add(60 * 24 * time.Hour)
+	user.PasswordExpiresAt = time.Now().Add(time.Duration(h.Config.PasswordExpirationDays) * 24 * time.Hour)
 
 	if err := h.Repo.Update(ctx, user); err != nil {
 		http.Error(w, "failed to reset password", http.StatusInternalServerError)

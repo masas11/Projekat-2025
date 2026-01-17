@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 
+	"users-service/config"
 	"users-service/internal/dto"
 	"users-service/internal/mail"
 	"users-service/internal/model"
@@ -18,11 +19,12 @@ import (
 )
 
 type RegisterHandler struct {
-	Repo *store.UserRepository
+	Repo   *store.UserRepository
+	Config *config.Config
 }
 
-func NewRegisterHandler(repo *store.UserRepository) *RegisterHandler {
-	return &RegisterHandler{Repo: repo}
+func NewRegisterHandler(repo *store.UserRepository, cfg *config.Config) *RegisterHandler {
+	return &RegisterHandler{Repo: repo, Config: cfg}
 }
 
 func (h *RegisterHandler) Register(w http.ResponseWriter, r *http.Request) {
@@ -115,7 +117,7 @@ func (h *RegisterHandler) Register(w http.ResponseWriter, r *http.Request) {
 		Role:              "USER",
 		Verified:          false, // User must verify email first
 		PasswordChangedAt: now,
-		PasswordExpiresAt: now.Add(60 * 24 * time.Hour),
+		PasswordExpiresAt: now.Add(time.Duration(h.Config.PasswordExpirationDays) * 24 * time.Hour),
 		CreatedAt:         now,
 	}
 

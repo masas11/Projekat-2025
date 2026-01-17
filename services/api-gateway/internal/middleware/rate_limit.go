@@ -84,6 +84,13 @@ func RateLimit(maxReqs int, window time.Duration) func(http.HandlerFunc) http.Ha
 
 	return func(next http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
+			// Handle OPTIONS preflight requests - allow them through without rate limiting
+			if r.Method == "OPTIONS" {
+				enableCORS(w, r)
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+
 			// Get client IP
 			ip := r.RemoteAddr
 			if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
@@ -91,6 +98,7 @@ func RateLimit(maxReqs int, window time.Duration) func(http.HandlerFunc) http.Ha
 			}
 
 			if !limiter.Allow(ip) {
+				enableCORS(w, r)
 				http.Error(w, "too many requests", http.StatusTooManyRequests)
 				return
 			}

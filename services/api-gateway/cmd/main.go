@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"api-gateway/config"
@@ -42,6 +43,7 @@ func proxyRequest(w http.ResponseWriter, r *http.Request, targetURL string) {
 	// Čitanje body-ja zahteva
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
+		// CORS headers već postavljeni na početku funkcije
 		http.Error(w, "Failed to read request body", http.StatusBadRequest)
 		return
 	}
@@ -50,6 +52,7 @@ func proxyRequest(w http.ResponseWriter, r *http.Request, targetURL string) {
 	// Kreiranje novog zahteva ka backend servisu
 	req, err := http.NewRequest(r.Method, targetURL, bytes.NewBuffer(body))
 	if err != nil {
+		// CORS headers već postavljeni na početku funkcije
 		http.Error(w, "Failed to create request", http.StatusInternalServerError)
 		return
 	}
@@ -69,17 +72,24 @@ func proxyRequest(w http.ResponseWriter, r *http.Request, targetURL string) {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
+		// CORS headers već postavljeni na početku funkcije
 		http.Error(w, "Service unavailable", http.StatusServiceUnavailable)
 		return
 	}
 	defer resp.Body.Close()
 
-	// Kopiranje status koda i headers-a
+	// Kopiranje status koda i headers-a (ali ne kopiraj CORS headers - API Gateway kontroliše CORS)
 	for key, values := range resp.Header {
+		// Preskoči CORS headers pri kopiranju odgovora - API Gateway kontroliše CORS
+		if strings.HasPrefix(key, "Access-Control-") {
+			continue
+		}
 		for _, value := range values {
 			w.Header().Add(key, value)
 		}
 	}
+	// Postavi CORS headers nakon kopiranja backend headers-a (ovo prepisuje one koje smo možda propustili)
+	enableCORS(w, r)
 	w.WriteHeader(resp.StatusCode)
 
 	// Kopiranje body-ja odgovora

@@ -22,12 +22,32 @@ type UserClaims struct {
 	jwt.RegisteredClaims
 }
 
+// enableCORS adds CORS headers to the response
+func enableCORS(w http.ResponseWriter, r *http.Request) {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		origin = "*"
+	}
+	w.Header().Set("Access-Control-Allow-Origin", origin)
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+	w.Header().Set("Access-Control-Allow-Credentials", "true")
+}
+
 // JWTAuth validates JWT token and extracts user claims
 func JWTAuth(cfg *config.Config) func(http.HandlerFunc) http.HandlerFunc {
 	return func(next http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
+			// Handle OPTIONS preflight requests - allow them through without auth
+			if r.Method == "OPTIONS" {
+				enableCORS(w, r)
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" {
+				enableCORS(w, r)
 				http.Error(w, "authorization header required", http.StatusUnauthorized)
 				return
 			}
@@ -35,6 +55,7 @@ func JWTAuth(cfg *config.Config) func(http.HandlerFunc) http.HandlerFunc {
 			// Extract token from "Bearer <token>"
 			parts := strings.Split(authHeader, " ")
 			if len(parts) != 2 || parts[0] != "Bearer" {
+				enableCORS(w, r)
 				http.Error(w, "invalid authorization header format", http.StatusUnauthorized)
 				return
 			}
@@ -57,6 +78,7 @@ func JWTAuth(cfg *config.Config) func(http.HandlerFunc) http.HandlerFunc {
 			})
 
 			if err != nil || !token.Valid {
+				enableCORS(w, r)
 				http.Error(w, "invalid or expired token", http.StatusUnauthorized)
 				return
 			}
@@ -80,11 +102,13 @@ func RequireRole(requiredRole string, cfg *config.Config) func(http.HandlerFunc)
 		return auth(func(w http.ResponseWriter, r *http.Request) {
 			claims, ok := r.Context().Value(UserContextKey).(*UserClaims)
 			if !ok || claims == nil {
+				enableCORS(w, r)
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
 
 			if claims.Role != requiredRole {
+				enableCORS(w, r)
 				http.Error(w, "forbidden: "+requiredRole+" access required", http.StatusForbidden)
 				return
 			}

@@ -294,6 +294,37 @@ func main() {
 		proxyRequest(w, r, cfg.NotificationsServiceURL+"/notifications"+query)
 	})))
 
+	// SUBSCRIPTIONS SERVICE ROUTES
+	mux.HandleFunc("/api/subscriptions/health", globalRateLimit(func(w http.ResponseWriter, r *http.Request) {
+		proxyRequest(w, r, cfg.SubscriptionsServiceURL+"/health")
+	}))
+
+	// GET /api/subscriptions - get user subscriptions (requires auth)
+	mux.HandleFunc("/api/subscriptions", globalRateLimit(middleware.RequireAuth(cfg)(func(w http.ResponseWriter, r *http.Request) {
+		// Get userId from JWT token
+		claims, ok := r.Context().Value(middleware.UserContextKey).(*middleware.UserClaims)
+		if !ok || claims == nil {
+			enableCORS(w, r)
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		// Add userId to query params
+		query := "?userId=" + claims.UserID
+		proxyRequest(w, r, cfg.SubscriptionsServiceURL+"/subscriptions"+query)
+	})))
+
+	// POST /api/subscriptions/subscribe-artist - subscribe to artist (requires auth)
+	// DELETE /api/subscriptions/subscribe-artist - unsubscribe from artist (requires auth)
+	mux.HandleFunc("/api/subscriptions/subscribe-artist", globalRateLimit(middleware.RequireAuth(cfg)(func(w http.ResponseWriter, r *http.Request) {
+		proxyRequest(w, r, cfg.SubscriptionsServiceURL+"/subscribe-artist")
+	})))
+
+	// POST /api/subscriptions/subscribe-genre - subscribe to genre (requires auth)
+	// DELETE /api/subscriptions/subscribe-genre - unsubscribe from genre (requires auth)
+	mux.HandleFunc("/api/subscriptions/subscribe-genre", globalRateLimit(middleware.RequireAuth(cfg)(func(w http.ResponseWriter, r *http.Request) {
+		proxyRequest(w, r, cfg.SubscriptionsServiceURL+"/subscribe-genre")
+	})))
+
 	log.Println("API Gateway running on port", cfg.Port)
 	log.Fatal(http.ListenAndServe(":"+cfg.Port, mux))
 }

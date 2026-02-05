@@ -8,6 +8,7 @@ type Config struct {
 	UsersServiceURL     string
 	ContentServiceURL   string
 	NotificationsServiceURL string
+	SubscriptionsServiceURL string
 }
 
 func Load() *Config {
@@ -31,6 +32,11 @@ func Load() *Config {
 		notificationsURL = "http://localhost:8005"
 	}
 
+	subscriptionsURL := os.Getenv("SUBSCRIPTIONS_SERVICE_URL")
+	if subscriptionsURL == "" {
+		subscriptionsURL = "http://localhost:8004"
+	}
+
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
 		jwtSecret = "your-secret-key-change-in-production" // Default, should match users-service
@@ -42,5 +48,6 @@ func Load() *Config {
 		UsersServiceURL:     usersURL,
 		ContentServiceURL:   contentURL,
 		NotificationsServiceURL: notificationsURL,
+		SubscriptionsServiceURL: subscriptionsURL,
 	}
 }

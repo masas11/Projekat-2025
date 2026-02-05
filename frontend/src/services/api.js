@@ -227,6 +227,41 @@ class ApiService {
   async getNotifications() {
     return this.request('/api/notifications');
   }
+
+  // Subscriptions Service
+  async getSubscriptions() {
+    try {
+      const result = await this.request('/api/subscriptions');
+      return Array.isArray(result) ? result : [];
+    } catch (err) {
+      console.error('Error getting subscriptions:', err);
+      return [];
+    }
+  }
+
+  async subscribeToArtist(artistId, userId) {
+    return this.request(`/api/subscriptions/subscribe-artist?artistId=${artistId}&userId=${userId}`, {
+      method: 'POST',
+    });
+  }
+
+  async unsubscribeFromArtist(artistId, userId) {
+    return this.request(`/api/subscriptions/subscribe-artist?artistId=${artistId}&userId=${userId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async subscribeToGenre(genre, userId) {
+    return this.request(`/api/subscriptions/subscribe-genre?genre=${genre}&userId=${userId}`, {
+      method: 'POST',
+    });
+  }
+
+  async unsubscribeFromGenre(genre, userId) {
+    return this.request(`/api/subscriptions/subscribe-genre?genre=${genre}&userId=${userId}`, {
+      method: 'DELETE',
+    });
+  }
 }
 
 export default new ApiService();

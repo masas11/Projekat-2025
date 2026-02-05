@@ -27,6 +27,7 @@ const Navbar = () => {
           <Link to="/albums">Albumi</Link>
           <Link to="/songs">Pesme</Link>
           {user && <Link to={`/notifications?userId=${user.id}`}>Notifikacije</Link>}
+          {user && <Link to="/profile">Moj Profil</Link>}
           {user && <Link to="/change-password">Promena lozinke</Link>}
         </div>
         <div className="navbar-user">

@@ -127,7 +127,17 @@ func main() {
 	})
 
 	// GET /notifications?userId={id} - get notifications for user
-	mux.HandleFunc("/notifications", notificationHandler.GetNotifications)
+	// POST /notifications - create notification
+	mux.HandleFunc("/notifications", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			notificationHandler.GetNotifications(w, r)
+		case http.MethodPost:
+			notificationHandler.CreateNotification(w, r)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
 
 	log.Println("Notifications service running on port", cfg.Port)
 	log.Fatal(http.ListenAndServe(":"+cfg.Port, mux))

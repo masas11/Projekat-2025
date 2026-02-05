@@ -6,12 +6,14 @@
 data/mongodb-users/*
 data/mongodb-content/*
 data/mongodb-ratings/*
+data/mongodb-subscriptions/*
 data/cassandra/*
 
 # But keep .gitkeep files
 !data/mongodb-users/.gitkeep
 !data/mongodb-content/.gitkeep
 !data/mongodb-ratings/.gitkeep
+!data/mongodb-subscriptions/.gitkeep
 !data/cassandra/.gitkeep
 
 # Go

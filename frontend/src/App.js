@@ -19,6 +19,7 @@ import Songs from './components/Songs';
 import SongDetail from './components/SongDetail';
 import UrlTester from './components/UrlTester';
 import Notifications from './components/Notifications';
+import Profile from './components/Profile';
 import ProtectedRoute from './components/ProtectedRoute';
 import './App.css';
 
@@ -57,6 +58,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <Notifications />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/profile"
+              element={
+                <ProtectedRoute>
+                  <Profile />
                 </ProtectedRoute>
               }
             />

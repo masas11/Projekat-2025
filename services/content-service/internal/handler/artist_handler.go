@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"content-service/internal/dto"
+	"content-service/internal/events"
 	"content-service/internal/model"
 	"content-service/internal/store"
 )
@@ -21,11 +22,15 @@ func extractArtistID(path string) string {
 }
 
 type ArtistHandler struct {
-	Repo *store.ArtistRepository
+	Repo                    *store.ArtistRepository
+	SubscriptionsServiceURL string
 }
 
-func NewArtistHandler(repo *store.ArtistRepository) *ArtistHandler {
-	return &ArtistHandler{Repo: repo}
+func NewArtistHandler(repo *store.ArtistRepository, subscriptionsServiceURL string) *ArtistHandler {
+	return &ArtistHandler{
+		Repo:                    repo,
+		SubscriptionsServiceURL: subscriptionsServiceURL,
+	}
 }
 
 func (h *ArtistHandler) CreateArtist(w http.ResponseWriter, r *http.Request) {
@@ -64,6 +69,15 @@ func (h *ArtistHandler) CreateArtist(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to create artist: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	// Emit event for new artist (asynchronous)
+	event := events.NewArtistEvent{
+		Type:     events.EventTypeNewArtist,
+		ArtistID: artist.ID,
+		Name:     artist.Name,
+		Genres:   artist.Genres,
+	}
+	events.EmitEvent(h.SubscriptionsServiceURL, event)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)

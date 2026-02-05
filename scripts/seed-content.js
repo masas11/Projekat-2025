@@ -1,6 +1,11 @@
 // MongoDB seed script for content-service
 // Run with: docker exec -i projekat-2025-mongodb-content-1 mongosh music_streaming < scripts/seed-content.js
 
+// Clear existing data (optional - comment out if you want to keep existing data)
+// db.artists.deleteMany({});
+// db.albums.deleteMany({});
+// db.songs.deleteMany({});
+
 // Artists
 db.artists.insertMany([
   {
@@ -36,6 +41,13 @@ db.artists.insertMany([
     name: "Ed Sheeran",
     biography: "Edward Christopher Sheeran MBE is an English singer-songwriter.",
     genres: ["Pop", "Folk", "Acoustic"],
+    createdAt: new Date()
+  },
+  {
+    _id: "artist6",
+    name: "Toše Proeski",
+    biography: "Makedonski pop izvođač.",
+    genres: ["Pop"],
     createdAt: new Date()
   }
 ]);
@@ -84,6 +96,15 @@ db.albums.insertMany([
     releaseDate: new Date("2017-03-03"),
     genre: "Pop",
     artistIds: ["artist5"],
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    _id: "album6",
+    name: "Ledena",
+    releaseDate: new Date("2001-12-01"),
+    genre: "Pop",
+    artistIds: ["artist6"],
     createdAt: new Date(),
     updatedAt: new Date()
   }
@@ -154,6 +175,17 @@ db.songs.insertMany([
     albumId: "album5",
     artistIds: ["artist5"],
     audioFileUrl: "/music/Lady-Gaga-Abracadabra.mp3",
+    createdAt: new Date(),
+    updatedAt: new Date()
+  },
+  {
+    _id: "song7",
+    name: "Mesečina",
+    duration: 182,
+    genre: "Pop",
+    albumId: "album6",
+    artistIds: ["artist6"],
+    audioFileUrl: "/music/Mesecina.mp3",
     createdAt: new Date(),
     updatedAt: new Date()
   }

@@ -30,9 +30,9 @@ func main() {
 	songRepo := store.NewSongRepository(dbStore.Database)
 
 	// Initialize handlers
-	artistHandler := handler.NewArtistHandler(artistRepo)
-	albumHandler := handler.NewAlbumHandler(albumRepo)
-	songHandler := handler.NewSongHandler(songRepo, albumRepo)
+	artistHandler := handler.NewArtistHandler(artistRepo, cfg.SubscriptionsServiceURL)
+	albumHandler := handler.NewAlbumHandler(albumRepo, cfg.SubscriptionsServiceURL)
+	songHandler := handler.NewSongHandler(songRepo, albumRepo, cfg.SubscriptionsServiceURL)
 
 	mux := http.NewServeMux()
 

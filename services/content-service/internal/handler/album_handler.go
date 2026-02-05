@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"content-service/internal/dto"
+	"content-service/internal/events"
 	"content-service/internal/model"
 	"content-service/internal/store"
 )
@@ -19,11 +20,15 @@ func extractAlbumID(path string) string {
 }
 
 type AlbumHandler struct {
-	Repo *store.AlbumRepository
+	Repo                    *store.AlbumRepository
+	SubscriptionsServiceURL string
 }
 
-func NewAlbumHandler(repo *store.AlbumRepository) *AlbumHandler {
-	return &AlbumHandler{Repo: repo}
+func NewAlbumHandler(repo *store.AlbumRepository, subscriptionsServiceURL string) *AlbumHandler {
+	return &AlbumHandler{
+		Repo:                    repo,
+		SubscriptionsServiceURL: subscriptionsServiceURL,
+	}
 }
 
 func (h *AlbumHandler) CreateAlbum(w http.ResponseWriter, r *http.Request) {
@@ -63,6 +68,16 @@ func (h *AlbumHandler) CreateAlbum(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to create album: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	// Emit event for new album (asynchronous)
+	event := events.NewAlbumEvent{
+		Type:      events.EventTypeNewAlbum,
+		AlbumID:   album.ID,
+		Name:      album.Name,
+		Genre:     album.Genre,
+		ArtistIDs: album.ArtistIDs,
+	}
+	events.EmitEvent(h.SubscriptionsServiceURL, event)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)

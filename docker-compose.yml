@@ -10,10 +10,12 @@ services:
       - USERS_SERVICE_URL=http://users-service:8001
       - CONTENT_SERVICE_URL=http://content-service:8002
       - NOTIFICATIONS_SERVICE_URL=http://notifications-service:8005
+      - SUBSCRIPTIONS_SERVICE_URL=http://subscriptions-service:8004
     depends_on:
       - users-service
       - content-service
       - notifications-service
+      - subscriptions-service
     networks:
       - music-streaming-network
 
@@ -29,7 +31,8 @@ services:
       - MONGODB_URI=mongodb://mongodb-users:27017
       - MONGODB_DATABASE=users_db
     depends_on:
-      - mongodb-users
+      mongodb-users:
+        condition: service_healthy
     networks:
       - music-streaming-network
 
@@ -39,6 +42,12 @@ services:
       - "27017:27017"
     volumes:
       - ./data/mongodb-users:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
     networks:
       - music-streaming-network
 
@@ -53,8 +62,10 @@ services:
       - MONGODB_URI=mongodb://mongodb-content:27017
       - MONGODB_DATABASE=music_streaming
       - JWT_SECRET=your-secret-key-change-in-production
+      - SUBSCRIPTIONS_SERVICE_URL=http://subscriptions-service:8004
     depends_on:
-      - mongodb-content
+      mongodb-content:
+        condition: service_healthy
     networks:
       - music-streaming-network
 
@@ -64,6 +75,12 @@ services:
       - "27018:27017"
     volumes:
       - ./data/mongodb-content:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
     networks:
       - music-streaming-network
 
@@ -73,6 +90,12 @@ services:
       - "27019:27017"
     volumes:
       - ./data/mongodb-ratings:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
     networks:
       - music-streaming-network
 
@@ -88,8 +111,25 @@ services:
       - MONGODB_URI=mongodb://mongodb-ratings:27017
       - MONGODB_DATABASE=ratings_db
     depends_on:
-      - content-service
-      - mongodb-ratings
+      content-service:
+        condition: service_started
+      mongodb-ratings:
+        condition: service_healthy
+    networks:
+      - music-streaming-network
+
+  mongodb-subscriptions:
+    image: mongo:7.0
+    ports:
+      - "27020:27017"
+    volumes:
+      - ./data/mongodb-subscriptions:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
     networks:
       - music-streaming-network
 
@@ -102,8 +142,16 @@ services:
     environment:
       - PORT=8004
       - CONTENT_SERVICE_URL=http://content-service:8002
+      - MONGODB_URI=mongodb://mongodb-subscriptions:27017
+      - MONGODB_DATABASE=subscriptions_db
+      - NOTIFICATIONS_SERVICE_URL=http://notifications-service:8005
     depends_on:
-      - content-service
+      content-service:
+        condition: service_started
+      mongodb-subscriptions:
+        condition: service_healthy
+      notifications-service:
+        condition: service_started
     networks:
       - music-streaming-network
 

@@ -3,10 +3,11 @@ package config
 import "os"
 
 type Config struct {
-	Port            string
-	MongoDBURI      string
-	MongoDBDatabase string
-	JWTSecret       string
+	Port                 string
+	MongoDBURI           string
+	MongoDBDatabase      string
+	JWTSecret            string
+	SubscriptionsServiceURL string
 }
 
 func Load() *Config {
@@ -30,10 +31,16 @@ func Load() *Config {
 		jwtSecret = "your-secret-key-change-in-production" // Should match users-service secret
 	}
 
+	subscriptionsServiceURL := os.Getenv("SUBSCRIPTIONS_SERVICE_URL")
+	if subscriptionsServiceURL == "" {
+		subscriptionsServiceURL = "http://subscriptions-service:8004"
+	}
+
 	return &Config{
-		Port:            port,
-		MongoDBURI:      mongoURI,
-		MongoDBDatabase: mongoDB,
-		JWTSecret:       jwtSecret,
+		Port:                 port,
+		MongoDBURI:           mongoURI,
+		MongoDBDatabase:      mongoDB,
+		JWTSecret:            jwtSecret,
+		SubscriptionsServiceURL: subscriptionsServiceURL,
 	}
 }

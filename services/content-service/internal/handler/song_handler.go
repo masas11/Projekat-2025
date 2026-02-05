@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"content-service/internal/dto"
+	"content-service/internal/events"
 	"content-service/internal/model"
 	"content-service/internal/store"
 )
@@ -19,14 +20,16 @@ func extractSongID(path string) string {
 }
 
 type SongHandler struct {
-	Repo      *store.SongRepository
-	AlbumRepo *store.AlbumRepository
+	Repo                    *store.SongRepository
+	AlbumRepo               *store.AlbumRepository
+	SubscriptionsServiceURL string
 }
 
-func NewSongHandler(repo *store.SongRepository, albumRepo *store.AlbumRepository) *SongHandler {
+func NewSongHandler(repo *store.SongRepository, albumRepo *store.AlbumRepository, subscriptionsServiceURL string) *SongHandler {
 	return &SongHandler{
-		Repo:      repo,
-		AlbumRepo: albumRepo,
+		Repo:                    repo,
+		AlbumRepo:               albumRepo,
+		SubscriptionsServiceURL: subscriptionsServiceURL,
 	}
 }
 
@@ -84,6 +87,17 @@ func (h *SongHandler) CreateSong(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to create song: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	// Emit event for new song (asynchronous)
+	event := events.NewSongEvent{
+		Type:      events.EventTypeNewSong,
+		SongID:    song.ID,
+		Name:      song.Name,
+		Genre:     song.Genre,
+		ArtistIDs: song.ArtistIDs,
+		AlbumID:   song.AlbumID,
+	}
+	events.EmitEvent(h.SubscriptionsServiceURL, event)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)

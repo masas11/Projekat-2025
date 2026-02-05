@@ -67,8 +67,11 @@ services:
     environment:
       - PORT=8003
       - CONTENT_SERVICE_URL=http://content-service:8002
+      - MONGODB_URI=mongodb://mongodb:27017
+      - MONGODB_DATABASE=ratings_db
     depends_on:
       - content-service
+      - mongodb
     networks:
       - music-streaming-network
 
@@ -80,6 +83,9 @@ services:
       - "8004:8004"
     environment:
       - PORT=8004
+      - CONTENT_SERVICE_URL=http://content-service:8002
+    depends_on:
+      - content-service
     networks:
       - music-streaming-network
 

@@ -5,18 +5,30 @@ import api from '../services/api';
 
 const Songs = () => {
   const [songs, setSongs] = useState([]);
+  const [filteredSongs, setFilteredSongs] = useState([]);
   const [albums, setAlbums] = useState([]);
   const [artists, setArtists] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingSong, setEditingSong] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedGenre, setSelectedGenre] = useState('');
+  
+  // Predefined genres for consistency
+  const predefinedGenres = [
+    'Pop', 'Rock', 'Jazz', 'Classical', 'Electronic', 
+    'Hip-Hop', 'Country', 'R&B', 'Reggae', 'Blues',
+    'Metal', 'Folk', 'Soul', 'Funk', 'Punk'
+  ];
+  
   const [formData, setFormData] = useState({
     name: '',
     duration: '',
     genre: '',
-    albumID: '',
+    albumId: '',
     selectedArtistIds: [],
+    audioFileUrl: '',
   });
   const { isAdmin } = useAuth();
   const navigate = useNavigate();
@@ -26,6 +38,30 @@ const Songs = () => {
     loadAlbums();
     loadArtists();
   }, []);
+
+  useEffect(() => {
+    filterSongs();
+  }, [songs, searchTerm, selectedGenre]);
+
+  const filterSongs = () => {
+    let filtered = songs;
+
+    // Filter by search term
+    if (searchTerm) {
+      filtered = filtered.filter(song =>
+        song.name.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    // Filter by genre
+    if (selectedGenre) {
+      filtered = filtered.filter(song =>
+        song.genre === selectedGenre
+      );
+    }
+
+    setFilteredSongs(filtered);
+  };
 
   const loadSongs = async () => {
     try {
@@ -80,8 +116,9 @@ const Songs = () => {
       name: formData.name,
       duration: parseInt(formData.duration),
       genre: formData.genre,
-      albumId: formData.albumID,
+      albumId: formData.albumId,
       artistIds: formData.selectedArtistIds,
+      audioFileUrl: formData.audioFileUrl,
     };
 
     try {
@@ -92,7 +129,7 @@ const Songs = () => {
       }
       setShowForm(false);
       setEditingSong(null);
-      setFormData({ name: '', duration: '', genre: '', albumID: '', selectedArtistIds: [] });
+      setFormData({ name: '', duration: '', genre: '', albumId: '', selectedArtistIds: [], audioFileUrl: '' });
       loadSongs();
     } catch (err) {
       setError(err.message || 'Greška pri čuvanju pesme');
@@ -105,8 +142,9 @@ const Songs = () => {
       name: song.name,
       duration: song.duration || '',
       genre: song.genre || '',
-      albumID: song.albumId || song.albumID || '',
+      albumId: song.albumId || song.albumID || '',
       selectedArtistIds: song.artistIds || song.artistIDs || [],
+      audioFileUrl: song.audioFileUrl || '',
     });
     setShowForm(true);
   };
@@ -114,7 +152,7 @@ const Songs = () => {
   const handleCancel = () => {
     setShowForm(false);
     setEditingSong(null);
-    setFormData({ name: '', duration: '', genre: '', albumID: '', selectedArtistIds: [] });
+    setFormData({ name: '', duration: '', genre: '', albumId: '', selectedArtistIds: [], audioFileUrl: '' });
   };
 
   const formatDuration = (seconds) => {
@@ -164,19 +202,31 @@ const Songs = () => {
             </div>
             <div className="form-group">
               <label>Žanr:</label>
-              <input
-                type="text"
+              <select
                 name="genre"
                 value={formData.genre}
                 onChange={handleChange}
                 required
-              />
+                style={{ 
+                  width: '100%', 
+                  padding: '8px', 
+                  border: '1px solid #ddd',
+                  borderRadius: '4px'
+                }}
+              >
+                <option value="">Izaberite žanr</option>
+                {predefinedGenres.map((genre) => (
+                  <option key={genre} value={genre}>
+                    {genre}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="form-group">
               <label>Album:</label>
               <select
-                name="albumID"
-                value={formData.albumID}
+                name="albumId"
+                value={formData.albumId}
                 onChange={handleChange}
                 required
                 style={{ 
@@ -222,6 +272,26 @@ const Songs = () => {
                 </p>
               )}
             </div>
+            <div className="form-group">
+              <label>Audio File URL:</label>
+              <input
+                type="text"
+                name="audioFileUrl"
+                value={formData.audioFileUrl}
+                onChange={handleChange}
+                placeholder="/music/Lady Gaga - Abracadabra.mp3 ili https://example.com/song.mp3"
+                style={{ 
+                  width: '100%', 
+                  padding: '8px', 
+                  border: '1px solid #ddd',
+                  borderRadius: '4px'
+                }}
+              />
+              <p style={{ marginTop: '5px', fontSize: '0.9em', color: '#666' }}>
+                Unesite URL do audio fajla (MP3, WAV, OGG) ili lokalnu putanju<br/>
+                <strong>Napomena:</strong> Koristite validne audio URL-ove za reprodukciju
+              </p>
+            </div>
             {error && <div className="error">{error}</div>}
             <div style={{ display: 'flex', gap: '10px' }}>
               <button type="submit" className="btn btn-primary">
@@ -236,11 +306,62 @@ const Songs = () => {
 
         {error && !showForm && <div className="error">{error}</div>}
 
+        {/* Search and Filter Controls */}
+        <div style={{ 
+          marginTop: '20px', 
+          padding: '15px', 
+          backgroundColor: '#f8f9fa', 
+          borderRadius: '5px',
+          border: '1px solid #ddd'
+        }}>
+          <h4>Pretraga i Filtriranje</h4>
+          <div style={{ display: 'flex', gap: '15px', marginBottom: '10px' }}>
+            <div style={{ flex: 1 }}>
+              <label>Pretraga po nazivu:</label>
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Unesite naziv pesme..."
+                style={{ 
+                  width: '100%', 
+                  padding: '8px', 
+                  border: '1px solid #ddd',
+                  borderRadius: '4px'
+                }}
+              />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label>Filtriranje po žanru:</label>
+              <select
+                value={selectedGenre}
+                onChange={(e) => setSelectedGenre(e.target.value)}
+                style={{ 
+                  width: '100%', 
+                  padding: '8px', 
+                  border: '1px solid #ddd',
+                  borderRadius: '4px'
+                }}
+              >
+                <option value="">Svi žanrovi</option>
+                {predefinedGenres.map((genre) => (
+                  <option key={genre} value={genre}>
+                    {genre}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div style={{ fontSize: '0.9em', color: '#666' }}>
+            Pronađeno pesama: {filteredSongs.length} od {songs.length}
+          </div>
+        </div>
+
         <div style={{ marginTop: '20px' }}>
-          {songs.length === 0 ? (
-            <p>Nema pesama.</p>
+          {filteredSongs.length === 0 ? (
+            <p>{songs.length === 0 ? 'Nema pesama.' : 'Nema pesama koje odgovaraju pretrazi.'}</p>
           ) : (
-            songs.map((song) => (
+            filteredSongs.map((song) => (
               <div
                 key={song.id}
                 className="list-item"

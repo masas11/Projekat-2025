@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"path/filepath"
 	"strings"
 
 	"content-service/config"
@@ -39,6 +40,37 @@ func main() {
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("content-service is running"))
+	})
+
+	// Static file server for music files
+	mux.HandleFunc("/music/", func(w http.ResponseWriter, r *http.Request) {
+		filePath := strings.TrimPrefix(r.URL.Path, "/music/")
+		if filePath == "" {
+			http.Error(w, "file path is required", http.StatusBadRequest)
+			return
+		}
+
+		// For security, only allow specific file extensions
+		ext := strings.ToLower(filepath.Ext(filePath))
+		allowedExts := map[string]bool{
+			".mp3":  true,
+			".wav":  true,
+			".ogg":  true,
+			".m4a":  true,
+			".flac": true,
+		}
+
+		if !allowedExts[ext] {
+			http.Error(w, "file type not allowed", http.StatusForbidden)
+			return
+		}
+
+		// Serve files from a music directory (adjust path as needed)
+		musicDir := "./music" // Create this folder in your service directory
+		fullPath := filepath.Join(musicDir, filePath)
+
+		// Check if file exists
+		http.ServeFile(w, r, fullPath)
 	})
 
 	// Album routes
@@ -100,10 +132,19 @@ func main() {
 	// GET /songs/{id} - get song by ID (public)
 	// PUT /songs/{id} - update song (admin only, requires JWT)
 	// DELETE /songs/{id} - delete song (admin only, requires JWT)
+	// GET /songs/{id}/stream - stream song audio (public)
 	mux.HandleFunc("/songs/", func(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimPrefix(r.URL.Path, "/songs/")
 		if path == "" {
 			http.Error(w, "song ID is required", http.StatusBadRequest)
+			return
+		}
+
+		// Check if this is a streaming request
+		if strings.HasSuffix(path, "/stream") {
+			songID := strings.TrimSuffix(path, "/stream")
+			r.URL.Path = "/songs/" + songID + "/stream"
+			songHandler.StreamSong(w, r)
 			return
 		}
 

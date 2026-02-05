@@ -205,10 +205,21 @@ func main() {
 		proxyRequest(w, r, cfg.ContentServiceURL+"/albums/"+path)
 	})
 
-	// Song routes
+	// GET /api/content/songs/by-album?albumId={id} - get songs by album
+	mux.HandleFunc("/api/content/songs/by-album", globalRateLimit(func(w http.ResponseWriter, r *http.Request) {
+		proxyRequest(w, r, cfg.ContentServiceURL+"/songs/by-album")
+	}))
+
 	// GET /api/content/songs - get all songs (public)
 	// POST /api/content/songs - create song (admin only)
 	mux.HandleFunc("/api/content/songs", globalRateLimit(middleware.OptionalAuth(cfg)(func(w http.ResponseWriter, r *http.Request) {
+		// Handle preflight OPTIONS request
+		if r.Method == "OPTIONS" {
+			enableCORS(w, r)
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
 		if r.Method == http.MethodPost {
 			middleware.RequireRole("ADMIN", cfg)(func(w http.ResponseWriter, r *http.Request) {
 				proxyRequest(w, r, cfg.ContentServiceURL+"/songs")
@@ -218,15 +229,48 @@ func main() {
 		}
 	})))
 
-	// GET /api/content/songs/by-album?albumId={id} - get songs by album
-	mux.HandleFunc("/api/content/songs/by-album", globalRateLimit(func(w http.ResponseWriter, r *http.Request) {
-		proxyRequest(w, r, cfg.ContentServiceURL+"/songs/by-album")
-	}))
-
 	// GET /api/content/songs/{id} - get song by ID
+	// PUT /api/content/songs/{id} - update song (admin only)
+	// DELETE /api/content/songs/{id} - delete song (admin only)
+	// GET /api/content/songs/{id}/stream - stream song audio (public)
 	mux.HandleFunc("/api/content/songs/", func(w http.ResponseWriter, r *http.Request) {
+		// Handle preflight OPTIONS request
+		if r.Method == "OPTIONS" {
+			enableCORS(w, r)
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
 		path := r.URL.Path[len("/api/content/songs/"):]
-		proxyRequest(w, r, cfg.ContentServiceURL+"/songs/"+path)
+
+		// Check if this is a streaming request
+		if strings.HasSuffix(path, "/stream") {
+			proxyRequest(w, r, cfg.ContentServiceURL+"/songs/"+path)
+			return
+		}
+
+		// Handle specific song ID routes (GET, PUT, DELETE)
+		if path != "" && !strings.Contains(path, "/") {
+			if r.Method == http.MethodGet {
+				proxyRequest(w, r, cfg.ContentServiceURL+"/songs/"+path)
+			} else if r.Method == http.MethodPut {
+				middleware.RequireRole("ADMIN", cfg)(func(w http.ResponseWriter, r *http.Request) {
+					proxyRequest(w, r, cfg.ContentServiceURL+"/songs/"+path)
+				})(w, r)
+			} else if r.Method == http.MethodDelete {
+				middleware.RequireRole("ADMIN", cfg)(func(w http.ResponseWriter, r *http.Request) {
+					proxyRequest(w, r, cfg.ContentServiceURL+"/songs/"+path)
+				})(w, r)
+			} else {
+				enableCORS(w, r)
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			}
+			return
+		}
+
+		// This should not be reached due to the above logic
+		enableCORS(w, r)
+		http.Error(w, "invalid request", http.StatusBadRequest)
 	})
 
 	// NOTIFICATIONS SERVICE ROUTES
@@ -244,7 +288,7 @@ func main() {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		
+
 		// Use userId from JWT token, ignore any userId in query parameters for security
 		query := "?userId=" + claims.UserID
 		proxyRequest(w, r, cfg.NotificationsServiceURL+"/notifications"+query)

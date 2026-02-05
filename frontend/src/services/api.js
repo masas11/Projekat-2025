@@ -1,5 +1,7 @@
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8081';
 
+// Za HTTPS development, postavite REACT_APP_API_URL=https://localhost:8081
+
 class ApiService {
   constructor() {
     this.baseURL = API_BASE_URL;
@@ -214,6 +216,10 @@ class ApiService {
     return this.request(`/api/content/songs/${id}`, {
       method: 'DELETE',
     });
+  }
+
+  getStreamUrl(songId) {
+    return `${this.baseURL}/api/content/songs/${songId}/stream`;
   }
 
   // Notifications Service

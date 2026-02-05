@@ -19,8 +19,8 @@ func extractSongID(path string) string {
 }
 
 type SongHandler struct {
-	Repo        *store.SongRepository
-	AlbumRepo   *store.AlbumRepository
+	Repo      *store.SongRepository
+	AlbumRepo *store.AlbumRepository
 }
 
 func NewSongHandler(repo *store.SongRepository, albumRepo *store.AlbumRepository) *SongHandler {
@@ -72,11 +72,12 @@ func (h *SongHandler) CreateSong(w http.ResponseWriter, r *http.Request) {
 	}
 
 	song := &model.Song{
-		Name:      req.Name,
-		Duration:  req.Duration,
-		Genre:     req.Genre,
-		AlbumID:   req.AlbumID,
-		ArtistIDs: req.ArtistIDs,
+		Name:         req.Name,
+		Duration:     req.Duration,
+		Genre:        req.Genre,
+		AlbumID:      req.AlbumID,
+		ArtistIDs:    req.ArtistIDs,
+		AudioFileURL: req.AudioFileURL,
 	}
 
 	if err := h.Repo.Create(r.Context(), song); err != nil {
@@ -222,6 +223,7 @@ func (h *SongHandler) UpdateSong(w http.ResponseWriter, r *http.Request) {
 	existingSong.Genre = req.Genre
 	existingSong.AlbumID = req.AlbumID
 	existingSong.ArtistIDs = req.ArtistIDs
+	existingSong.AudioFileURL = req.AudioFileURL
 
 	if err := h.Repo.Update(r.Context(), id, existingSong); err != nil {
 		http.Error(w, "failed to update song: "+err.Error(), http.StatusInternalServerError)
@@ -257,15 +259,62 @@ func (h *SongHandler) DeleteSong(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (h *SongHandler) StreamSong(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	id := extractSongID(r.URL.Path)
+	if id == "" {
+		http.Error(w, "song ID is required", http.StatusBadRequest)
+		return
+	}
+
+	// Check if song exists
+	song, err := h.Repo.GetByID(r.Context(), id)
+	if err != nil {
+		http.Error(w, "song not found", http.StatusNotFound)
+		return
+	}
+
+	// Set headers for audio streaming
+	w.Header().Set("Accept-Ranges", "bytes")
+	w.Header().Set("Cache-Control", "no-cache")
+
+	if song.AudioFileURL != "" {
+		// If song has a URL, redirect to it or proxy it
+		if strings.HasPrefix(song.AudioFileURL, "http://") || strings.HasPrefix(song.AudioFileURL, "https://") {
+			// For external URLs, we could either redirect or proxy
+			// For now, let's redirect
+			http.Redirect(w, r, song.AudioFileURL, http.StatusTemporaryRedirect)
+			return
+		} else {
+			// For local file paths, serve the file
+			http.ServeFile(w, r, song.AudioFileURL)
+			return
+		}
+	}
+
+	// If no audio file is specified, return a placeholder or error
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusNotFound)
+	json.NewEncoder(w).Encode(map[string]string{
+		"error": "No audio file available for this song",
+		"song":  song.Name,
+	})
+}
+
 func toSongResponse(song *model.Song) *dto.SongResponse {
 	return &dto.SongResponse{
-		ID:        song.ID,
-		Name:      song.Name,
-		Duration:  song.Duration,
-		Genre:     song.Genre,
-		AlbumID:   song.AlbumID,
-		ArtistIDs: song.ArtistIDs,
-		CreatedAt: song.CreatedAt,
-		UpdatedAt: song.UpdatedAt,
+		ID:           song.ID,
+		Name:         song.Name,
+		Duration:     song.Duration,
+		Genre:        song.Genre,
+		AlbumID:      song.AlbumID,
+		ArtistIDs:    song.ArtistIDs,
+		AudioFileURL: song.AudioFileURL,
+		CreatedAt:    song.CreatedAt,
+		UpdatedAt:    song.UpdatedAt,
 	}
 }

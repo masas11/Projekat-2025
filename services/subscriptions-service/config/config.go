@@ -3,7 +3,8 @@ package config
 import "os"
 
 type Config struct {
-	Port string
+	Port              string
+	ContentServiceURL string
 }
 
 func Load() *Config {
@@ -11,5 +12,14 @@ func Load() *Config {
 	if port == "" {
 		port = "8004"
 	}
-	return &Config{Port: port}
+
+	contentServiceURL := os.Getenv("CONTENT_SERVICE_URL")
+	if contentServiceURL == "" {
+		contentServiceURL = "http://localhost:8081"
+	}
+
+	return &Config{
+		Port:              port,
+		ContentServiceURL: contentServiceURL,
+	}
 }

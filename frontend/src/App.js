@@ -17,6 +17,7 @@ import Albums from './components/Albums';
 import AlbumDetail from './components/AlbumDetail';
 import Songs from './components/Songs';
 import SongDetail from './components/SongDetail';
+import UrlTester from './components/UrlTester';
 import Notifications from './components/Notifications';
 import ProtectedRoute from './components/ProtectedRoute';
 import './App.css';
@@ -50,6 +51,7 @@ function App() {
             <Route path="/albums/:id" element={<AlbumDetail />} />
             <Route path="/songs" element={<Songs />} />
             <Route path="/songs/:id" element={<SongDetail />} />
+            <Route path="/url-tester" element={<UrlTester />} />
             <Route
               path="/notifications"
               element={

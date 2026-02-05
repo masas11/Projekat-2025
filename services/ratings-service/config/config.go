@@ -15,7 +15,7 @@ func Load() *Config {
 
 	contentURL := os.Getenv("CONTENT_SERVICE_URL")
 	if contentURL == "" {
-		contentURL = "http://localhost:8002"
+		contentURL = "http://localhost:8081"
 	}
 
 	return &Config{

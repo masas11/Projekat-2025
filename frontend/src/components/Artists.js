@@ -5,10 +5,12 @@ import api from '../services/api';
 
 const Artists = () => {
   const [artists, setArtists] = useState([]);
+  const [filteredArtists, setFilteredArtists] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingArtist, setEditingArtist] = useState(null);
+  const [selectedGenre, setSelectedGenre] = useState('');
   const [formData, setFormData] = useState({
     name: '',
     biography: '',
@@ -20,6 +22,23 @@ const Artists = () => {
   useEffect(() => {
     loadArtists();
   }, []);
+
+  useEffect(() => {
+    filterArtists();
+  }, [artists, selectedGenre]);
+
+  const filterArtists = () => {
+    let filtered = artists;
+
+    // Filter by genre
+    if (selectedGenre) {
+      filtered = filtered.filter(artist =>
+        artist.genres && artist.genres.includes(selectedGenre)
+      );
+    }
+
+    setFilteredArtists(filtered);
+  };
 
   const loadArtists = async () => {
     try {
@@ -140,11 +159,49 @@ const Artists = () => {
 
         {error && !showForm && <div className="error">{error}</div>}
 
+        {/* Genre Filter */}
+        <div style={{ 
+          marginTop: '20px', 
+          padding: '15px', 
+          backgroundColor: '#f8f9fa', 
+          borderRadius: '5px',
+          border: '1px solid #ddd'
+        }}>
+          <h4>Filtriranje po žanru</h4>
+          <div style={{ flex: 1 }}>
+            <label>Izaberite žanr:</label>
+            <select
+              value={selectedGenre}
+              onChange={(e) => setSelectedGenre(e.target.value)}
+              style={{ 
+                width: '100%', 
+                padding: '8px', 
+                border: '1px solid #ddd',
+                borderRadius: '4px'
+              }}
+            >
+              <option value="">Svi žanrovi</option>
+              <option value="Pop">Pop</option>
+              <option value="Rock">Rock</option>
+              <option value="Jazz">Jazz</option>
+              <option value="Classical">Classical</option>
+              <option value="Electronic">Electronic</option>
+              <option value="Hip-Hop">Hip-Hop</option>
+              <option value="Country">Country</option>
+              <option value="R&B">R&B</option>
+              <option value="Reggae">Reggae</option>
+            </select>
+          </div>
+          <div style={{ fontSize: '0.9em', color: '#666', marginTop: '10px' }}>
+            Pronađeno umetnika: {filteredArtists.length} od {artists.length}
+          </div>
+        </div>
+
         <div style={{ marginTop: '20px' }}>
-          {artists.length === 0 ? (
-            <p>Nema izvođača.</p>
+          {filteredArtists.length === 0 ? (
+            <p>{artists.length === 0 ? 'Nema izvođača.' : 'Nema umetnika koji odgovaraju filtru.'}</p>
           ) : (
-            artists.map((artist) => (
+            filteredArtists.map((artist) => (
               <div
                 key={artist.id}
                 className="list-item"

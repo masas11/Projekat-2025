@@ -1,0 +1,57 @@
+# Data directories (bind mounts)
+# Uncomment the line below if you DON'T want to commit database data to git
+# data/
+
+# Keep data directory structure but ignore actual database files
+data/mongodb-users/*
+data/mongodb-content/*
+data/mongodb-ratings/*
+data/cassandra/*
+
+# But keep .gitkeep files
+!data/mongodb-users/.gitkeep
+!data/mongodb-content/.gitkeep
+!data/mongodb-ratings/.gitkeep
+!data/cassandra/.gitkeep
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+go.work
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Environment
+.env
+.env.local
+
+# Node modules (frontend)
+frontend/node_modules/
+
+# Certificates
+certs/*.key
+certs/*.crt
+certs/*.pem
+!certs/.gitkeep
+
+# Temporary files
+*.tmp
+*.bak

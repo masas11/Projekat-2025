@@ -12,14 +12,7 @@ services:
       - USERS_SERVICE_URL=https://users-service:8001
       - CONTENT_SERVICE_URL=https://content-service:8002
       - NOTIFICATIONS_SERVICE_URL=https://notifications-service:8005
-    volumes:
-      - ./certs:/app/certs:ro
-    depends_on:
-      - users-service
-      - content-service
-      - notifications-service
-    networks:
-      - music-streaming-network
+# Volumes are now bind mounts in ./data/ directory
 
   users-service:
     build:
@@ -30,16 +23,17 @@ services:
     environment:
       - PORT=8001
       - JWT_SECRET=your-secret-key-change-in-production
-      - MONGODB_URI=mongodb://mongodb:27017
+      - MONGODB_URI=mongodb://mongodb-users:27017
       - MONGODB_DATABASE=users_db
       - TLS_CERT_FILE=/app/certs/server.crt
       - TLS_KEY_FILE=/app/certs/server.key
-    volumes:
-      - ./certs:/app/certs:ro
-    depends_on:
-      - mongodb
-    networks:
-      - music-streaming-network
+# Volumes are now bind mounts in ./data/ directory
+
+  mongodb-users:
+    image: mongo:7.0
+    ports:
+      - "27017:27017"
+# Volumes are now bind mounts in ./data/ directory
 
   content-service:
     build:
@@ -49,26 +43,24 @@ services:
       - "8002:8002"
     environment:
       - PORT=8002
-      - MONGODB_URI=mongodb://mongodb:27017
+      - MONGODB_URI=mongodb://mongodb-content:27017
       - MONGODB_DATABASE=music_streaming
       - JWT_SECRET=your-secret-key-change-in-production
       - TLS_CERT_FILE=/app/certs/server.crt
       - TLS_KEY_FILE=/app/certs/server.key
-    volumes:
-      - ./certs:/app/certs:ro
-    depends_on:
-      - mongodb
-    networks:
-      - music-streaming-network
+# Volumes are now bind mounts in ./data/ directory
 
-  mongodb:
+  mongodb-content:
     image: mongo:7.0
     ports:
-      - "27017:27017"
-    volumes:
-      - mongodb_data:/data/db
-    networks:
-      - music-streaming-network
+      - "27018:27017"
+# Volumes are now bind mounts in ./data/ directory
+
+  mongodb-ratings:
+    image: mongo:7.0
+    ports:
+      - "27019:27017"
+# Volumes are now bind mounts in ./data/ directory
 
   ratings-service:
     build:
@@ -79,17 +71,11 @@ services:
     environment:
       - PORT=8003
       - CONTENT_SERVICE_URL=https://content-service:8002
-      - MONGODB_URI=mongodb://mongodb:27017
+      - MONGODB_URI=mongodb://mongodb-ratings:27017
       - MONGODB_DATABASE=ratings_db
       - TLS_CERT_FILE=/app/certs/server.crt
       - TLS_KEY_FILE=/app/certs/server.key
-    volumes:
-      - ./certs:/app/certs:ro
-    depends_on:
-      - content-service
-      - mongodb
-    networks:
-      - music-streaming-network
+# Volumes are now bind mounts in ./data/ directory
 
   subscriptions-service:
     build:
@@ -102,12 +88,7 @@ services:
       - CONTENT_SERVICE_URL=https://content-service:8002
       - TLS_CERT_FILE=/app/certs/server.crt
       - TLS_KEY_FILE=/app/certs/server.key
-    volumes:
-      - ./certs:/app/certs:ro
-    depends_on:
-      - content-service
-    networks:
-      - music-streaming-network
+# Volumes are now bind mounts in ./data/ directory
 
   notifications-service:
     build:
@@ -117,16 +98,17 @@ services:
       - "8005:8005"
     environment:
       - PORT=8005
-      - MONGODB_URI=mongodb://mongodb:27017
-      - MONGODB_DATABASE=notifications_db
+      - CASSANDRA_HOSTS=cassandra:9042
+      - CASSANDRA_KEYSPACE=notifications_keyspace
       - TLS_CERT_FILE=/app/certs/server.crt
       - TLS_KEY_FILE=/app/certs/server.key
-    volumes:
-      - ./certs:/app/certs:ro
-    depends_on:
-      - mongodb
-    networks:
-      - music-streaming-network
+# Volumes are now bind mounts in ./data/ directory
+
+  cassandra:
+    image: cassandra:4.1
+    ports:
+      - "9042:9042"
+# Volumes are now bind mounts in ./data/ directory
 
   recommendation-service:
     build:
@@ -138,10 +120,7 @@ services:
       - PORT=8006
       - TLS_CERT_FILE=/app/certs/server.crt
       - TLS_KEY_FILE=/app/certs/server.key
-    volumes:
-      - ./certs:/app/certs:ro
-    networks:
-      - music-streaming-network
+# Volumes are now bind mounts in ./data/ directory
 
   analytics-service:
     build:
@@ -153,14 +132,10 @@ services:
       - PORT=8007
       - TLS_CERT_FILE=/app/certs/server.crt
       - TLS_KEY_FILE=/app/certs/server.key
-    volumes:
-      - ./certs:/app/certs:ro
-    networks:
-      - music-streaming-network
+# Volumes are now bind mounts in ./data/ directory
 
 networks:
   music-streaming-network:
     driver: bridge
 
-volumes:
-  mongodb_data:
+# Volumes are now bind mounts in ./data/ directory

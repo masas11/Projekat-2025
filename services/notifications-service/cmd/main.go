@@ -63,7 +63,9 @@ func initSampleNotifications(ctx context.Context, repo *store.NotificationReposi
 	}
 
 	for _, notif := range sampleNotifications {
-		repo.Create(ctx, notif)
+		if err := repo.Create(ctx, notif); err != nil {
+			log.Printf("Failed to create sample notification: %v", err)
+		}
 	}
 	log.Println("Sample notifications initialized with real user IDs")
 }
@@ -71,16 +73,45 @@ func initSampleNotifications(ctx context.Context, repo *store.NotificationReposi
 func main() {
 	cfg := config.Load()
 
-	// Initialize MongoDB connection
-	dbStore, err := store.NewMongoDBStore(cfg.MongoDBURI, cfg.MongoDBDatabase)
+	// Retry mechanism to wait for Cassandra to be ready
+	maxRetries := 30
+	retryDelay := 2 * time.Second
+	var err error
+
+	log.Println("Waiting for Cassandra to be ready...")
+	for i := 0; i < maxRetries; i++ {
+		// Initialize keyspace and tables first
+		if err = store.InitKeyspace(cfg.CassandraHosts, cfg.CassandraKeyspace); err == nil {
+			log.Println("Cassandra keyspace and tables initialized successfully")
+			break
+		}
+		log.Printf("Attempt %d/%d: Failed to initialize Cassandra keyspace: %v. Retrying in %v...", i+1, maxRetries, err, retryDelay)
+		time.Sleep(retryDelay)
+	}
+
 	if err != nil {
-		log.Fatal("Failed to connect to MongoDB:", err)
+		log.Fatal("Failed to initialize Cassandra keyspace after retries:", err)
+	}
+
+	// Initialize Cassandra connection with retry
+	var dbStore *store.CassandraStore
+	for i := 0; i < maxRetries; i++ {
+		dbStore, err = store.NewCassandraStore(cfg.CassandraHosts, cfg.CassandraKeyspace)
+		if err == nil {
+			break
+		}
+		log.Printf("Attempt %d/%d: Failed to connect to Cassandra: %v. Retrying in %v...", i+1, maxRetries, err, retryDelay)
+		time.Sleep(retryDelay)
+	}
+
+	if err != nil {
+		log.Fatal("Failed to connect to Cassandra after retries:", err)
 	}
 	defer dbStore.Close()
-	log.Println("Connected to MongoDB")
+	log.Println("Connected to Cassandra")
 
 	// Initialize repository
-	notificationRepo := store.NewNotificationRepository(dbStore.Database)
+	notificationRepo := store.NewNotificationRepository(dbStore.Session)
 
 	// Initialize sample notifications
 	ctx := context.Background()

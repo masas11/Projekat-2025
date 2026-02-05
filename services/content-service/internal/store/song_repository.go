@@ -24,7 +24,7 @@ func NewSongRepository(db *mongo.Database) *SongRepository {
 
 func (r *SongRepository) Create(ctx context.Context, song *model.Song) error {
 	song.ID = uuid.NewString()
-	now := time.Now().Format(time.RFC3339)
+	now := time.Now()
 	song.CreatedAt = now
 	song.UpdatedAt = now
 
@@ -83,7 +83,7 @@ func (r *SongRepository) Exists(ctx context.Context, id string) (bool, error) {
 }
 
 func (r *SongRepository) Update(ctx context.Context, id string, song *model.Song) error {
-	song.UpdatedAt = time.Now().Format(time.RFC3339)
+	song.UpdatedAt = time.Now()
 	
 	update := bson.M{
 		"$set": bson.M{

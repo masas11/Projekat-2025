@@ -26,10 +26,19 @@ services:
     environment:
       - PORT=8001
       - JWT_SECRET=your-secret-key-change-in-production
-      - MONGODB_URI=mongodb://mongodb:27017
+      - MONGODB_URI=mongodb://mongodb-users:27017
       - MONGODB_DATABASE=users_db
     depends_on:
-      - mongodb
+      - mongodb-users
+    networks:
+      - music-streaming-network
+
+  mongodb-users:
+    image: mongo:7.0
+    ports:
+      - "27017:27017"
+    volumes:
+      - ./data/mongodb-users:/data/db
     networks:
       - music-streaming-network
 
@@ -41,20 +50,29 @@ services:
       - "8002:8002"
     environment:
       - PORT=8002
-      - MONGODB_URI=mongodb://mongodb:27017
+      - MONGODB_URI=mongodb://mongodb-content:27017
       - MONGODB_DATABASE=music_streaming
       - JWT_SECRET=your-secret-key-change-in-production
     depends_on:
-      - mongodb
+      - mongodb-content
     networks:
       - music-streaming-network
 
-  mongodb:
+  mongodb-content:
     image: mongo:7.0
     ports:
-      - "27017:27017"
+      - "27018:27017"
     volumes:
-      - mongodb_data:/data/db
+      - ./data/mongodb-content:/data/db
+    networks:
+      - music-streaming-network
+
+  mongodb-ratings:
+    image: mongo:7.0
+    ports:
+      - "27019:27017"
+    volumes:
+      - ./data/mongodb-ratings:/data/db
     networks:
       - music-streaming-network
 
@@ -67,11 +85,11 @@ services:
     environment:
       - PORT=8003
       - CONTENT_SERVICE_URL=http://content-service:8002
-      - MONGODB_URI=mongodb://mongodb:27017
+      - MONGODB_URI=mongodb://mongodb-ratings:27017
       - MONGODB_DATABASE=ratings_db
     depends_on:
       - content-service
-      - mongodb
+      - mongodb-ratings
     networks:
       - music-streaming-network
 
@@ -97,12 +115,25 @@ services:
       - "8005:8005"
     environment:
       - PORT=8005
-      - MONGODB_URI=mongodb://mongodb:27017
-      - MONGODB_DATABASE=notifications_db
+      - CASSANDRA_HOSTS=cassandra:9042
+      - CASSANDRA_KEYSPACE=notifications_keyspace
     depends_on:
-      - mongodb
+      - cassandra
     networks:
       - music-streaming-network
+
+  cassandra:
+    image: cassandra:4.1
+    ports:
+      - "9042:9042"
+    volumes:
+      - ./data/cassandra:/var/lib/cassandra
+    networks:
+      - music-streaming-network
+    environment:
+      - CASSANDRA_CLUSTER_NAME=MusicStreamingCluster
+      - MAX_HEAP_SIZE=512M
+      - HEAP_NEWSIZE=100M
 
   recommendation-service:
     build:
@@ -130,5 +161,5 @@ networks:
   music-streaming-network:
     driver: bridge
 
-volumes:
-  mongodb_data:
+# Volumes are now bind mounts in ./data/ directory
+# Data is stored locally and can be shared via git

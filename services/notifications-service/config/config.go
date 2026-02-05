@@ -3,9 +3,9 @@ package config
 import "os"
 
 type Config struct {
-	Port            string
-	MongoDBURI      string
-	MongoDBDatabase string
+	Port              string
+	CassandraHosts    string
+	CassandraKeyspace string
 }
 
 func Load() *Config {
@@ -14,19 +14,19 @@ func Load() *Config {
 		port = "8005"
 	}
 
-	mongoURI := os.Getenv("MONGODB_URI")
-	if mongoURI == "" {
-		mongoURI = "mongodb://localhost:27017"
+	cassandraHosts := os.Getenv("CASSANDRA_HOSTS")
+	if cassandraHosts == "" {
+		cassandraHosts = "localhost:9042"
 	}
 
-	mongoDB := os.Getenv("MONGODB_DATABASE")
-	if mongoDB == "" {
-		mongoDB = "notifications_db"
+	cassandraKeyspace := os.Getenv("CASSANDRA_KEYSPACE")
+	if cassandraKeyspace == "" {
+		cassandraKeyspace = "notifications_keyspace"
 	}
 
 	return &Config{
-		Port:            port,
-		MongoDBURI:      mongoURI,
-		MongoDBDatabase: mongoDB,
+		Port:              port,
+		CassandraHosts:    cassandraHosts,
+		CassandraKeyspace: cassandraKeyspace,
 	}
 }

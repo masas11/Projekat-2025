@@ -26,12 +26,18 @@ services:
     environment:
       - PORT=8001
       - JWT_SECRET=your-secret-key-change-in-production
-      - MONGODB_URI=mongodb://mongodb:27017
+      - MONGODB_URI=mongodb://mongodb-users:27017
       - MONGODB_DATABASE=users_db
     depends_on:
-      - mongodb
+      - mongodb-users
     networks:
       - music-streaming-network
+
+  mongodb-users:
+    image: mongo:7.0
+    ports:
+      - "27017:27017"
+# Volumes are now bind mounts in ./data/ directory
 
   content-service:
     build:
@@ -41,22 +47,19 @@ services:
       - "8002:8002"
     environment:
       - PORT=8002
-      - MONGODB_URI=mongodb://mongodb:27017
+      - MONGODB_URI=mongodb://mongodb-content:27017
       - MONGODB_DATABASE=music_streaming
       - JWT_SECRET=your-secret-key-change-in-production
     depends_on:
-      - mongodb
+      - mongodb-content
     networks:
       - music-streaming-network
 
-  mongodb:
+  mongodb-content:
     image: mongo:7.0
     ports:
-      - "27017:27017"
-    volumes:
-      - mongodb_data:/data/db
-    networks:
-      - music-streaming-network
+      - "27018:27017"
+# Volumes are now bind mounts in ./data/ directory
 
   notifications-service:
     build:
@@ -66,17 +69,22 @@ services:
       - "8005:8005"
     environment:
       - PORT=8005
-      - MONGODB_URI=mongodb://mongodb:27017
-      - MONGODB_DATABASE=notifications_db
+      - CASSANDRA_HOSTS=cassandra:9042
+      - CASSANDRA_KEYSPACE=notifications_keyspace
     depends_on:
-      - mongodb
+      - cassandra
     networks:
       - music-streaming-network
+
+  cassandra:
+    image: cassandra:4.1
+    ports:
+      - "9042:9042"
+# Volumes are now bind mounts in ./data/ directory
 
 networks:
   music-streaming-network:
     driver: bridge
 
-volumes:
-  mongodb_data:
+# Volumes are now bind mounts in ./data/ directory
 

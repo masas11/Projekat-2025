@@ -422,6 +422,27 @@ func main() {
 		proxyRequest(w, r, targetURL)
 	})))
 
+	// GET /api/ratings/recommendations - get personalized recommendations (requires auth, non-admin only)
+	mux.HandleFunc("/api/ratings/recommendations", globalRateLimit(requireNonAdmin(func(w http.ResponseWriter, r *http.Request) {
+		// Get userId from JWT token
+		claims, ok := r.Context().Value(middleware.UserContextKey).(*middleware.UserClaims)
+		if !ok || claims == nil {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		// Get query parameters
+		query := r.URL.Query()
+		userId := query.Get("userId")
+		if userId == "" {
+			userId = claims.UserID
+		}
+
+		// Create new request with updated query
+		targetURL := cfg.RatingsServiceURL + "/recommendations?userId=" + userId
+		proxyRequest(w, r, targetURL)
+	})))
+
 	log.Println("API Gateway running on port", cfg.Port)
 	log.Fatal(http.ListenAndServe(":"+cfg.Port, mux))
 }

@@ -146,6 +146,25 @@ func main() {
 	db := mongoClient.Database(mongoDBName)
 	ratingStore := store.NewRatingStore(db)
 
+	// Connect to other MongoDB instances for recommendations
+	// Content service MongoDB
+	contentClient, err := mongo.Connect(ctx, options.Client().ApplyURI("mongodb://mongodb-content:27017"))
+	if err != nil {
+		log.Fatalf("Failed to connect to content MongoDB: %v", err)
+	}
+	defer contentClient.Disconnect(ctx)
+
+	// Subscriptions service MongoDB
+	subscriptionsClient, err := mongo.Connect(ctx, options.Client().ApplyURI("mongodb://mongodb-subscriptions:27017"))
+	if err != nil {
+		log.Fatalf("Failed to connect to subscriptions MongoDB: %v", err)
+	}
+	defer subscriptionsClient.Disconnect(ctx)
+
+	contentDB := contentClient.Database("music_streaming")
+	subscriptionsDB := subscriptionsClient.Database("subscriptions_db")
+	recommendationStore := store.NewRecommendationStore(db, contentDB, subscriptionsDB)
+
 	log.Printf("Connected to MongoDB at %s, database: %s", mongoURI, mongoDBName)
 
 	// HTTP client with timeout (MANDATORY for 3.3)
@@ -399,6 +418,62 @@ func main() {
 			w.WriteHeader(http.StatusOK)
 			json.NewEncoder(w).Encode(map[string]int{"rating": rating.Rating})
 		}
+	})
+
+	// Recommendations endpoint
+	mux.HandleFunc("/recommendations", func(w http.ResponseWriter, r *http.Request) {
+		// Add CORS headers
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+		// Handle preflight request
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		userID := r.URL.Query().Get("userId")
+		if userID == "" {
+			http.Error(w, "userId parameter is required", http.StatusBadRequest)
+			return
+		}
+
+		// Get recommendations
+		recCtx, recCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer recCancel()
+
+		// Get songs from subscribed genres
+		subscribedSongs, err := recommendationStore.GetSongsByUserSubscribedGenres(recCtx, userID)
+		if err != nil {
+			log.Printf("Error getting subscribed genre songs: %v", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("Error getting recommendations"))
+			return
+		}
+
+		// Get top rated song from unsubscribed genre
+		topRatedSong, err := recommendationStore.GetTopRatedSongFromUnsubscribedGenre(recCtx, userID)
+		if err != nil {
+			log.Printf("Error getting top rated song: %v", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("Error getting recommendations"))
+			return
+		}
+
+		response := model.RecommendationResponse{
+			SubscribedGenreSongs: subscribedSongs,
+			TopRatedSong:         topRatedSong,
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(response)
 	})
 
 	log.Println("Ratings service running on port", cfg.Port)

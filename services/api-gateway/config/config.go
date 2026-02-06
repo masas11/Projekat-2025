@@ -3,12 +3,13 @@ package config
 import "os"
 
 type Config struct {
-	Port                string
-	JWTSecret           string
-	UsersServiceURL     string
-	ContentServiceURL   string
+	Port                    string
+	JWTSecret               string
+	UsersServiceURL         string
+	ContentServiceURL       string
 	NotificationsServiceURL string
 	SubscriptionsServiceURL string
+	RatingsServiceURL       string
 }
 
 func Load() *Config {
@@ -37,17 +38,23 @@ func Load() *Config {
 		subscriptionsURL = "http://localhost:8004"
 	}
 
+	ratingsURL := os.Getenv("RATINGS_SERVICE_URL")
+	if ratingsURL == "" {
+		ratingsURL = "http://localhost:8003"
+	}
+
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
 		jwtSecret = "your-secret-key-change-in-production" // Default, should match users-service
 	}
 
 	return &Config{
-		Port:                port,
-		JWTSecret:           jwtSecret,
-		UsersServiceURL:     usersURL,
-		ContentServiceURL:   contentURL,
+		Port:                    port,
+		JWTSecret:               jwtSecret,
+		UsersServiceURL:         usersURL,
+		ContentServiceURL:       contentURL,
 		NotificationsServiceURL: notificationsURL,
 		SubscriptionsServiceURL: subscriptionsURL,
+		RatingsServiceURL:       ratingsURL,
 	}
 }

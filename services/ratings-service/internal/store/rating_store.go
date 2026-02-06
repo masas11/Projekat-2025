@@ -112,3 +112,24 @@ func (rs *RatingStore) GetAverageRating(ctx context.Context, songID string) (flo
 
 	return 0, 0, nil
 }
+
+func (rs *RatingStore) DeleteBySongAndUser(ctx context.Context, songID, userID string) error {
+	filter := bson.M{
+		"songId": songID,
+		"userId": userID,
+	}
+
+	result, err := rs.collection.DeleteOne(ctx, filter)
+	if err != nil {
+		log.Printf("Error deleting rating: %v", err)
+		return err
+	}
+
+	if result.DeletedCount == 0 {
+		log.Printf("No rating found to delete for songId: %s, userId: %s", songID, userID)
+		return nil // Return nil instead of error for consistency
+	}
+
+	log.Printf("Deleted rating for songId: %s, userId: %s", songID, userID)
+	return nil
+}

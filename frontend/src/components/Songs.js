@@ -458,6 +458,7 @@ const Songs = () => {
                 <h3>{song.name}</h3>
                 {song.duration && <p>Trajanje: {formatDuration(song.duration)}</p>}
                 {song.genre && <span className="genre-tag">{song.genre}</span>}
+                
                 {isAdmin() && (
                   <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
                     <button

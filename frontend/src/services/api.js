@@ -262,6 +262,23 @@ class ApiService {
       method: 'DELETE',
     });
   }
+
+  // Ratings Service
+  async rateSong(songId, rating, userId) {
+    return this.request(`/api/ratings/rate-song?songId=${songId}&rating=${rating}&userId=${userId}`, {
+      method: 'POST',
+    });
+  }
+
+  async getRating(songId) {
+    return this.request(`/api/ratings/get-rating?songId=${songId}`);
+  }
+
+  async deleteRating(songId, userId) {
+    return this.request(`/api/ratings/delete-rating?songId=${songId}&userId=${userId}`, {
+      method: 'DELETE',
+    });
+  }
 }
 
 export default new ApiService();

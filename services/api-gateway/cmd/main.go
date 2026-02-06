@@ -69,7 +69,9 @@ func proxyRequest(w http.ResponseWriter, r *http.Request, targetURL string) {
 	}
 
 	// Slanje zahteva
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: 5 * time.Second, // Timeout za pozive backend servisa
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		// CORS headers već postavljeni na početku funkcije
@@ -323,6 +325,101 @@ func main() {
 	// DELETE /api/subscriptions/subscribe-genre - unsubscribe from genre (requires auth)
 	mux.HandleFunc("/api/subscriptions/subscribe-genre", globalRateLimit(middleware.RequireAuth(cfg)(func(w http.ResponseWriter, r *http.Request) {
 		proxyRequest(w, r, cfg.SubscriptionsServiceURL+"/subscribe-genre")
+	})))
+
+	// RATINGS SERVICE ROUTES
+	mux.HandleFunc("/api/ratings/health", globalRateLimit(func(w http.ResponseWriter, r *http.Request) {
+		proxyRequest(w, r, cfg.RatingsServiceURL+"/health")
+	}))
+
+	// Helper function to check if user is not admin
+	requireNonAdmin := func(next http.HandlerFunc) http.HandlerFunc {
+		return middleware.RequireAuth(cfg)(func(w http.ResponseWriter, r *http.Request) {
+			claims, ok := r.Context().Value(middleware.UserContextKey).(*middleware.UserClaims)
+			if !ok || claims == nil {
+				enableCORS(w, r)
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+
+			// Check if user is NOT admin
+			if claims.Role == "ADMIN" {
+				enableCORS(w, r)
+				http.Error(w, "admin users cannot rate songs", http.StatusForbidden)
+				return
+			}
+
+			next(w, r)
+		})
+	}
+
+	// POST /api/ratings/rate-song - rate/update a song (requires auth, non-admin only)
+	mux.HandleFunc("/api/ratings/rate-song", globalRateLimit(requireNonAdmin(func(w http.ResponseWriter, r *http.Request) {
+		// Get userId from JWT token
+		claims, ok := r.Context().Value(middleware.UserContextKey).(*middleware.UserClaims)
+		if !ok || claims == nil {
+			enableCORS(w, r)
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		// Add userId from JWT token to query params
+		query := r.URL.RawQuery
+		if query != "" {
+			query += "&userId=" + claims.UserID
+		} else {
+			query = "userId=" + claims.UserID
+		}
+
+		// Create new request with updated query
+		targetURL := cfg.RatingsServiceURL + "/rate-song?" + query
+		proxyRequest(w, r, targetURL)
+	})))
+
+	// DELETE /api/ratings/delete-rating - delete a rating (requires auth, non-admin only)
+	mux.HandleFunc("/api/ratings/delete-rating", globalRateLimit(requireNonAdmin(func(w http.ResponseWriter, r *http.Request) {
+		// Get userId from JWT token
+		claims, ok := r.Context().Value(middleware.UserContextKey).(*middleware.UserClaims)
+		if !ok || claims == nil {
+			enableCORS(w, r)
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		// Add userId from JWT token to query params
+		query := r.URL.RawQuery
+		if query != "" {
+			query += "&userId=" + claims.UserID
+		} else {
+			query = "userId=" + claims.UserID
+		}
+
+		// Create new request with updated query
+		targetURL := cfg.RatingsServiceURL + "/delete-rating?" + query
+		proxyRequest(w, r, targetURL)
+	})))
+
+	// GET /api/ratings/get-rating - get user's rating for a song (requires auth, non-admin only)
+	mux.HandleFunc("/api/ratings/get-rating", globalRateLimit(requireNonAdmin(func(w http.ResponseWriter, r *http.Request) {
+		// Get userId from JWT token
+		claims, ok := r.Context().Value(middleware.UserContextKey).(*middleware.UserClaims)
+		if !ok || claims == nil {
+			enableCORS(w, r)
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		// Add userId from JWT token to query params
+		query := r.URL.RawQuery
+		if query != "" {
+			query += "&userId=" + claims.UserID
+		} else {
+			query = "userId=" + claims.UserID
+		}
+
+		// Create new request with updated query
+		targetURL := cfg.RatingsServiceURL + "/get-rating?" + query
+		proxyRequest(w, r, targetURL)
 	})))
 
 	log.Println("API Gateway running on port", cfg.Port)

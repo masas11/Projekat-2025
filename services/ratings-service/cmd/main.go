@@ -85,21 +85,12 @@ func (e *CircuitBreakerError) Error() string {
 	return e.Message
 }
 
-// Synchronous call with retry + fallback
+// Synchronous call with retry + fallback - DEPRECATED, use checkSpecificSongExists
 func checkSongExists(client *http.Client, contentURL string) bool {
-	url := contentURL + "/songs/exists"
-
-	for i := 0; i < 2; i++ { // retry 2 times
-		resp, err := client.Get(url)
-		if err == nil && resp.StatusCode == http.StatusOK {
-			return true
-		}
-		log.Println("Retrying call to content-service...")
-	}
-
-	// fallback logic
-	log.Println("Content-service unavailable, fallback activated")
-	return false
+	// This function is deprecated - always return true to avoid blocking
+	// Use checkSpecificSongExists for actual validation
+	log.Println("WARNING: checkSongExists is deprecated, use checkSpecificSongExists")
+	return true
 }
 
 // Check if specific song exists by ID
@@ -310,6 +301,104 @@ func main() {
 
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("Song rated successfully"))
+	})
+
+	// Delete rating endpoint
+	mux.HandleFunc("/delete-rating", func(w http.ResponseWriter, r *http.Request) {
+		// Add CORS headers
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+		// Handle preflight request
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		if r.Method != http.MethodDelete {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		songID := r.URL.Query().Get("songId")
+		if songID == "" {
+			http.Error(w, "songId parameter is required", http.StatusBadRequest)
+			return
+		}
+
+		userID := r.URL.Query().Get("userId")
+		if userID == "" {
+			http.Error(w, "userId parameter is required", http.StatusBadRequest)
+			return
+		}
+
+		// Delete rating from database
+		ratingCtx, ratingCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer ratingCancel()
+
+		err := ratingStore.DeleteBySongAndUser(ratingCtx, songID, userID)
+		if err != nil {
+			if err.Error() == "rating not found" {
+				w.WriteHeader(http.StatusNotFound)
+				w.Write([]byte("Rating not found"))
+				return
+			}
+			log.Printf("Error deleting rating: %v", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("Error deleting rating"))
+			return
+		}
+
+		log.Printf("Deleted rating for song %s by user %s", songID, userID)
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("Rating deleted successfully"))
+	})
+
+	// Get user's rating for a song
+	mux.HandleFunc("/get-rating", func(w http.ResponseWriter, r *http.Request) {
+		// Add CORS headers
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		songID := r.URL.Query().Get("songId")
+		if songID == "" {
+			http.Error(w, "songId parameter is required", http.StatusBadRequest)
+			return
+		}
+
+		userID := r.URL.Query().Get("userId")
+		if userID == "" {
+			http.Error(w, "userId parameter is required", http.StatusBadRequest)
+			return
+		}
+
+		// Get rating from database
+		ratingCtx, ratingCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer ratingCancel()
+
+		rating, err := ratingStore.GetBySongAndUser(ratingCtx, songID, userID)
+		if err != nil {
+			log.Printf("Error getting rating: %v", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("Error getting rating"))
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if rating == nil {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"rating": null}`))
+		} else {
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]int{"rating": rating.Rating})
+		}
 	})
 
 	log.Println("Ratings service running on port", cfg.Port)

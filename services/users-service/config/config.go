@@ -6,12 +6,12 @@ import (
 )
 
 type Config struct {
-	Port                    string
-	JWTSecret               string
-	MongoDBURI              string
-	MongoDBDatabase         string
-	BaseURL                 string
-	PasswordExpirationDays  int // Number of days until password expires (default 60, can be overridden for testing)
+	Port                   string
+	JWTSecret              string
+	MongoDBURI             string
+	MongoDBDatabase        string
+	BaseURL                string
+	PasswordExpirationDays int // Number of days until password expires (default 60, can be overridden for testing)
 }
 
 func Load() *Config {

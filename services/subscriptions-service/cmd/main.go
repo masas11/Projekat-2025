@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"time"
 
 	"subscriptions-service/config"
@@ -487,5 +488,15 @@ func main() {
 	})
 
 	log.Println("Subscriptions service running on port", cfg.Port)
-	log.Fatal(http.ListenAndServe(":"+cfg.Port, mux))
+	
+	// Support HTTPS if certificates are provided
+	certFile := os.Getenv("TLS_CERT_FILE")
+	keyFile := os.Getenv("TLS_KEY_FILE")
+	if certFile != "" && keyFile != "" {
+		log.Println("Starting HTTPS server on port", cfg.Port)
+		log.Fatal(http.ListenAndServeTLS(":"+cfg.Port, certFile, keyFile, mux))
+	} else {
+		log.Println("Starting HTTP server on port", cfg.Port)
+		log.Fatal(http.ListenAndServe(":"+cfg.Port, mux))
+	}
 }

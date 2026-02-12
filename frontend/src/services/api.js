@@ -1,4 +1,4 @@
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8081';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://localhost:8081';
 
 // Za HTTPS development, postavite REACT_APP_API_URL=https://localhost:8081
 
@@ -44,7 +44,23 @@ class ApiService {
       
       if (!response.ok) {
         // Try to extract error message from various formats
-        const error = data.error || data.message || errorMessage || `HTTP error! status: ${response.status}`;
+        let error = data.error || data.message || errorMessage;
+        
+        // If no message in body, use status-based message
+        if (!error) {
+          if (response.status === 409) {
+            error = 'Korisnik sa ovim korisničkim imenom ili email adresom već postoji.';
+          } else if (response.status === 400) {
+            error = 'Neispravni podaci. Proverite unete podatke.';
+          } else if (response.status === 401) {
+            error = 'Neautorizovan pristup.';
+          } else if (response.status === 403) {
+            error = 'Pristup zabranjen.';
+          } else {
+            error = `HTTP greška! Status: ${response.status}`;
+          }
+        }
+        
         throw new Error(error);
       }
       

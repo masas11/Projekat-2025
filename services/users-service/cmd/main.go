@@ -4,6 +4,8 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/google/uuid"
@@ -11,6 +13,8 @@ import (
 
 	"users-service/config"
 	"users-service/internal/handler"
+	"users-service/internal/logger"
+	"users-service/internal/mail"
 	"users-service/internal/middleware"
 	"users-service/internal/model"
 	"users-service/internal/store"
@@ -64,13 +68,28 @@ func main() {
 	// Initialize repository
 	userRepo := store.NewUserRepository(dbStore.Database)
 
+	// Initialize logger
+	logDir := os.Getenv("LOG_DIR")
+	if logDir == "" {
+		logDir = filepath.Join(".", "logs")
+	}
+	appLogger, err := logger.NewLogger(logDir)
+	if err != nil {
+		log.Printf("Warning: Failed to initialize logger: %v, using stdout", err)
+		appLogger = logger.NewStdoutLogger()
+	}
+	defer appLogger.Close()
+
+	// Initialize email service
+	mail.Init(cfg)
+
 	// Initialize admin user
 	ctx := context.Background()
 	initAdminUser(ctx, userRepo, cfg)
 
 	// inicijalizacija handler-a
-	registerHandler := handler.NewRegisterHandler(userRepo, cfg)
-	loginHandler := handler.NewLoginHandler(userRepo, cfg)
+	registerHandler := handler.NewRegisterHandler(userRepo, cfg, appLogger)
+	loginHandler := handler.NewLoginHandler(userRepo, cfg, appLogger)
 	passwordHandler := handler.NewPasswordHandler(userRepo, cfg)
 	magicLinkHandler := handler.NewMagicLinkHandler(userRepo, cfg)
 	verificationHandler := handler.NewVerificationHandler(userRepo)
@@ -108,5 +127,24 @@ func main() {
 	mux.HandleFunc("/recover/verify", rateLimit(magicLinkHandler.VerifyMagicLink))
 
 	log.Println("Users service running on port", cfg.Port)
-	log.Fatal(http.ListenAndServe(":"+cfg.Port, mux))
+	
+	// Support HTTPS if certificates are provided
+	certFile := os.Getenv("TLS_CERT_FILE")
+	keyFile := os.Getenv("TLS_KEY_FILE")
+	if certFile != "" && keyFile != "" {
+		log.Println("Starting HTTPS server on port", cfg.Port)
+		server := &http.Server{
+			Addr:    ":" + cfg.Port,
+			Handler: mux,
+		}
+		if err := server.ListenAndServeTLS(certFile, keyFile); err != nil {
+			if appLogger != nil {
+				appLogger.LogTLSFailure("users-service", err.Error(), "")
+			}
+			log.Fatal("HTTPS server failed:", err)
+		}
+	} else {
+		log.Println("Starting HTTP server on port", cfg.Port)
+		log.Fatal(http.ListenAndServe(":"+cfg.Port, mux))
+	}
 }

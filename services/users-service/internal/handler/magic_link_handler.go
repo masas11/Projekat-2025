@@ -67,11 +67,10 @@ func (h *MagicLinkHandler) RequestMagicLink(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Send magic link via email (mock) - URL encode token to handle special characters
+	// Send magic link via email - URL encode token to handle special characters
 	// Note: Link points to frontend, which will call the API
 	encodedToken := url.QueryEscape(token)
-	// Assuming frontend runs on port 3000
-	magicLinkURL := "http://localhost:3000/verify-magic-link?token=" + encodedToken
+	magicLinkURL := h.Config.FrontendURL + "/verify-magic-link?token=" + encodedToken
 	mail.SendMagicLink(user.Email, magicLinkURL)
 
 	w.Header().Set("Content-Type", "application/json")

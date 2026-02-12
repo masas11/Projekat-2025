@@ -2,13 +2,17 @@ package main
 
 import (
 	"bytes"
+	"crypto/tls"
 	"io"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"api-gateway/config"
+	"api-gateway/internal/logger"
 	"api-gateway/internal/middleware"
 )
 
@@ -25,7 +29,7 @@ func enableCORS(w http.ResponseWriter, r *http.Request) {
 }
 
 // proxyRequest prosleđuje zahtev ka backend servisu
-func proxyRequest(w http.ResponseWriter, r *http.Request, targetURL string) {
+func proxyRequest(w http.ResponseWriter, r *http.Request, targetURL string, log *logger.Logger) {
 	// Dodaj CORS headers
 	enableCORS(w, r)
 
@@ -69,11 +73,26 @@ func proxyRequest(w http.ResponseWriter, r *http.Request, targetURL string) {
 	}
 
 	// Slanje zahteva
+	// Konfiguriši HTTP klijent da ignoriše sertifikate za inter-service komunikaciju
+	// (jer koristimo samopotpisane sertifikate)
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
 	client := &http.Client{
-		Timeout: 5 * time.Second, // Timeout za pozive backend servisa
+		Timeout:   5 * time.Second, // Timeout za pozive backend servisa
+		Transport: tr,
 	}
 	resp, err := client.Do(req)
 	if err != nil {
+		// Log TLS/connection errors
+		if log != nil {
+			errorMsg := err.Error()
+			if strings.Contains(errorMsg, "tls") || strings.Contains(errorMsg, "TLS") || 
+			   strings.Contains(errorMsg, "certificate") || strings.Contains(errorMsg, "handshake") {
+				serviceName := extractServiceName(targetURL)
+				log.LogTLSFailure(serviceName, errorMsg, r.RemoteAddr)
+			}
+		}
 		// CORS headers već postavljeni na početku funkcije
 		http.Error(w, "Service unavailable", http.StatusServiceUnavailable)
 		return
@@ -99,8 +118,36 @@ func proxyRequest(w http.ResponseWriter, r *http.Request, targetURL string) {
 	w.Write(responseBody)
 }
 
+// extractServiceName extracts service name from URL
+func extractServiceName(url string) string {
+	if strings.Contains(url, "users-service") {
+		return "users-service"
+	} else if strings.Contains(url, "content-service") {
+		return "content-service"
+	} else if strings.Contains(url, "notifications-service") {
+		return "notifications-service"
+	} else if strings.Contains(url, "subscriptions-service") {
+		return "subscriptions-service"
+	} else if strings.Contains(url, "ratings-service") {
+		return "ratings-service"
+	}
+	return "unknown-service"
+}
+
 func main() {
 	cfg := config.Load()
+
+	// Initialize logger
+	logDir := os.Getenv("LOG_DIR")
+	if logDir == "" {
+		logDir = filepath.Join(".", "logs")
+	}
+	appLogger, err := logger.NewLogger(logDir)
+	if err != nil {
+		log.Printf("Warning: Failed to initialize logger: %v, using stdout", err)
+		appLogger = logger.NewStdoutLogger()
+	}
+	defer appLogger.Close()
 
 	mux := http.NewServeMux()
 
@@ -109,112 +156,112 @@ func main() {
 
 	// USERS SERVICE ROUTES
 	mux.HandleFunc("/api/users/health", globalRateLimit(func(w http.ResponseWriter, r *http.Request) {
-		proxyRequest(w, r, cfg.UsersServiceURL+"/health")
+		proxyRequest(w, r, cfg.UsersServiceURL+"/health", appLogger)
 	}))
 
 	mux.HandleFunc("/api/users/register", globalRateLimit(func(w http.ResponseWriter, r *http.Request) {
-		proxyRequest(w, r, cfg.UsersServiceURL+"/register")
+		proxyRequest(w, r, cfg.UsersServiceURL+"/register", appLogger)
 	}))
 
 	mux.HandleFunc("/api/users/verify-email", globalRateLimit(func(w http.ResponseWriter, r *http.Request) {
-		proxyRequest(w, r, cfg.UsersServiceURL+"/verify-email")
+		proxyRequest(w, r, cfg.UsersServiceURL+"/verify-email", appLogger)
 	}))
 
 	mux.HandleFunc("/api/users/login/request-otp", globalRateLimit(func(w http.ResponseWriter, r *http.Request) {
-		proxyRequest(w, r, cfg.UsersServiceURL+"/login/request-otp")
+		proxyRequest(w, r, cfg.UsersServiceURL+"/login/request-otp", appLogger)
 	}))
 
 	mux.HandleFunc("/api/users/login/verify-otp", globalRateLimit(func(w http.ResponseWriter, r *http.Request) {
-		proxyRequest(w, r, cfg.UsersServiceURL+"/login/verify-otp")
+		proxyRequest(w, r, cfg.UsersServiceURL+"/login/verify-otp", appLogger)
 	}))
 
-	mux.HandleFunc("/api/users/logout", globalRateLimit(middleware.RequireAuth(cfg)(func(w http.ResponseWriter, r *http.Request) {
-		proxyRequest(w, r, cfg.UsersServiceURL+"/logout")
+	mux.HandleFunc("/api/users/logout", globalRateLimit(middleware.RequireAuth(cfg, appLogger)(func(w http.ResponseWriter, r *http.Request) {
+		proxyRequest(w, r, cfg.UsersServiceURL+"/logout", appLogger)
 	})))
 
-	mux.HandleFunc("/api/users/password/change", globalRateLimit(middleware.RequireAuth(cfg)(func(w http.ResponseWriter, r *http.Request) {
-		proxyRequest(w, r, cfg.UsersServiceURL+"/password/change")
+	mux.HandleFunc("/api/users/password/change", globalRateLimit(middleware.RequireAuth(cfg, appLogger)(func(w http.ResponseWriter, r *http.Request) {
+		proxyRequest(w, r, cfg.UsersServiceURL+"/password/change", appLogger)
 	})))
 
 	mux.HandleFunc("/api/users/password/reset/request", globalRateLimit(func(w http.ResponseWriter, r *http.Request) {
-		proxyRequest(w, r, cfg.UsersServiceURL+"/password/reset/request")
+		proxyRequest(w, r, cfg.UsersServiceURL+"/password/reset/request", appLogger)
 	}))
 
 	mux.HandleFunc("/api/users/password/reset", globalRateLimit(func(w http.ResponseWriter, r *http.Request) {
-		proxyRequest(w, r, cfg.UsersServiceURL+"/password/reset")
+		proxyRequest(w, r, cfg.UsersServiceURL+"/password/reset", appLogger)
 	}))
 
 	// Magic link endpoints (account recovery)
 	mux.HandleFunc("/api/users/recover/request", globalRateLimit(func(w http.ResponseWriter, r *http.Request) {
-		proxyRequest(w, r, cfg.UsersServiceURL+"/recover/request")
+		proxyRequest(w, r, cfg.UsersServiceURL+"/recover/request", appLogger)
 	}))
 	mux.HandleFunc("/api/users/recover/verify", globalRateLimit(func(w http.ResponseWriter, r *http.Request) {
-		proxyRequest(w, r, cfg.UsersServiceURL+"/recover/verify")
+		proxyRequest(w, r, cfg.UsersServiceURL+"/recover/verify", appLogger)
 	}))
 
 	// CONTENT SERVICE ROUTES
 	mux.HandleFunc("/api/content/health", func(w http.ResponseWriter, r *http.Request) {
-		proxyRequest(w, r, cfg.ContentServiceURL+"/health")
+		proxyRequest(w, r, cfg.ContentServiceURL+"/health", appLogger)
 	})
 
 	// Artists routes
 	// GET /api/content/artists - get all artists (public)
 	// POST /api/content/artists - create artist (admin only)
-	mux.HandleFunc("/api/content/artists", globalRateLimit(middleware.OptionalAuth(cfg)(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/content/artists", globalRateLimit(middleware.OptionalAuth(cfg, appLogger)(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
-			middleware.RequireRole("ADMIN", cfg)(func(w http.ResponseWriter, r *http.Request) {
-				proxyRequest(w, r, cfg.ContentServiceURL+"/artists")
+			middleware.RequireRole("ADMIN", cfg, appLogger)(func(w http.ResponseWriter, r *http.Request) {
+				proxyRequest(w, r, cfg.ContentServiceURL+"/artists", appLogger)
 			})(w, r)
 		} else {
-			proxyRequest(w, r, cfg.ContentServiceURL+"/artists")
+			proxyRequest(w, r, cfg.ContentServiceURL+"/artists", appLogger)
 		}
 	})))
 
 	// GET /api/content/artists/{id} - get artist by ID (public)
 	// PUT /api/content/artists/{id} - update artist (admin only)
-	mux.HandleFunc("/api/content/artists/", globalRateLimit(middleware.OptionalAuth(cfg)(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/content/artists/", globalRateLimit(middleware.OptionalAuth(cfg, appLogger)(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path[len("/api/content/artists/"):]
 		if r.Method == http.MethodPut || r.Method == http.MethodDelete {
-			middleware.RequireRole("ADMIN", cfg)(func(w http.ResponseWriter, r *http.Request) {
-				proxyRequest(w, r, cfg.ContentServiceURL+"/artists/"+path)
+			middleware.RequireRole("ADMIN", cfg, appLogger)(func(w http.ResponseWriter, r *http.Request) {
+				proxyRequest(w, r, cfg.ContentServiceURL+"/artists/"+path, appLogger)
 			})(w, r)
 		} else {
-			proxyRequest(w, r, cfg.ContentServiceURL+"/artists/"+path)
+			proxyRequest(w, r, cfg.ContentServiceURL+"/artists/"+path, appLogger)
 		}
 	})))
 
 	// Album routes
 	// GET /api/content/albums - get all albums (public)
 	// POST /api/content/albums - create album (admin only)
-	mux.HandleFunc("/api/content/albums", globalRateLimit(middleware.OptionalAuth(cfg)(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/content/albums", globalRateLimit(middleware.OptionalAuth(cfg, appLogger)(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
-			middleware.RequireRole("ADMIN", cfg)(func(w http.ResponseWriter, r *http.Request) {
-				proxyRequest(w, r, cfg.ContentServiceURL+"/albums")
+			middleware.RequireRole("ADMIN", cfg, appLogger)(func(w http.ResponseWriter, r *http.Request) {
+				proxyRequest(w, r, cfg.ContentServiceURL+"/albums", appLogger)
 			})(w, r)
 		} else {
-			proxyRequest(w, r, cfg.ContentServiceURL+"/albums")
+			proxyRequest(w, r, cfg.ContentServiceURL+"/albums", appLogger)
 		}
 	})))
 
 	// GET /api/content/albums/by-artist?artistId={id} - get albums by artist
 	mux.HandleFunc("/api/content/albums/by-artist", globalRateLimit(func(w http.ResponseWriter, r *http.Request) {
-		proxyRequest(w, r, cfg.ContentServiceURL+"/albums/by-artist")
+		proxyRequest(w, r, cfg.ContentServiceURL+"/albums/by-artist", appLogger)
 	}))
 
 	// GET /api/content/albums/{id} - get album by ID
 	mux.HandleFunc("/api/content/albums/", func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path[len("/api/content/albums/"):]
-		proxyRequest(w, r, cfg.ContentServiceURL+"/albums/"+path)
+		proxyRequest(w, r, cfg.ContentServiceURL+"/albums/"+path, appLogger)
 	})
 
 	// GET /api/content/songs/by-album?albumId={id} - get songs by album
 	mux.HandleFunc("/api/content/songs/by-album", globalRateLimit(func(w http.ResponseWriter, r *http.Request) {
-		proxyRequest(w, r, cfg.ContentServiceURL+"/songs/by-album")
+		proxyRequest(w, r, cfg.ContentServiceURL+"/songs/by-album", appLogger)
 	}))
 
 	// GET /api/content/songs - get all songs (public)
 	// POST /api/content/songs - create song (admin only)
-	mux.HandleFunc("/api/content/songs", globalRateLimit(middleware.OptionalAuth(cfg)(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/content/songs", globalRateLimit(middleware.OptionalAuth(cfg, appLogger)(func(w http.ResponseWriter, r *http.Request) {
 		// Handle preflight OPTIONS request
 		if r.Method == "OPTIONS" {
 			enableCORS(w, r)
@@ -223,11 +270,11 @@ func main() {
 		}
 
 		if r.Method == http.MethodPost {
-			middleware.RequireRole("ADMIN", cfg)(func(w http.ResponseWriter, r *http.Request) {
-				proxyRequest(w, r, cfg.ContentServiceURL+"/songs")
+			middleware.RequireRole("ADMIN", cfg, appLogger)(func(w http.ResponseWriter, r *http.Request) {
+				proxyRequest(w, r, cfg.ContentServiceURL+"/songs", appLogger)
 			})(w, r)
 		} else {
-			proxyRequest(w, r, cfg.ContentServiceURL+"/songs")
+			proxyRequest(w, r, cfg.ContentServiceURL+"/songs", appLogger)
 		}
 	})))
 
@@ -247,21 +294,21 @@ func main() {
 
 		// Check if this is a streaming request
 		if strings.HasSuffix(path, "/stream") {
-			proxyRequest(w, r, cfg.ContentServiceURL+"/songs/"+path)
+			proxyRequest(w, r, cfg.ContentServiceURL+"/songs/"+path, appLogger)
 			return
 		}
 
 		// Handle specific song ID routes (GET, PUT, DELETE)
 		if path != "" && !strings.Contains(path, "/") {
 			if r.Method == http.MethodGet {
-				proxyRequest(w, r, cfg.ContentServiceURL+"/songs/"+path)
+				proxyRequest(w, r, cfg.ContentServiceURL+"/songs/"+path, appLogger)
 			} else if r.Method == http.MethodPut {
-				middleware.RequireRole("ADMIN", cfg)(func(w http.ResponseWriter, r *http.Request) {
-					proxyRequest(w, r, cfg.ContentServiceURL+"/songs/"+path)
+				middleware.RequireRole("ADMIN", cfg, appLogger)(func(w http.ResponseWriter, r *http.Request) {
+					proxyRequest(w, r, cfg.ContentServiceURL+"/songs/"+path, appLogger)
 				})(w, r)
 			} else if r.Method == http.MethodDelete {
-				middleware.RequireRole("ADMIN", cfg)(func(w http.ResponseWriter, r *http.Request) {
-					proxyRequest(w, r, cfg.ContentServiceURL+"/songs/"+path)
+				middleware.RequireRole("ADMIN", cfg, appLogger)(func(w http.ResponseWriter, r *http.Request) {
+					proxyRequest(w, r, cfg.ContentServiceURL+"/songs/"+path, appLogger)
 				})(w, r)
 			} else {
 				enableCORS(w, r)
@@ -277,12 +324,12 @@ func main() {
 
 	// NOTIFICATIONS SERVICE ROUTES
 	mux.HandleFunc("/api/notifications/health", func(w http.ResponseWriter, r *http.Request) {
-		proxyRequest(w, r, cfg.NotificationsServiceURL+"/health")
+		proxyRequest(w, r, cfg.NotificationsServiceURL+"/health", appLogger)
 	})
 
 	// GET /api/notifications - get notifications for authenticated user (requires auth)
 	// userId is extracted from JWT token, not from query parameter for security
-	mux.HandleFunc("/api/notifications", globalRateLimit(middleware.RequireAuth(cfg)(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/notifications", globalRateLimit(middleware.RequireAuth(cfg, appLogger)(func(w http.ResponseWriter, r *http.Request) {
 		// Get userId from JWT token (set by RequireAuth middleware)
 		claims, ok := r.Context().Value(middleware.UserContextKey).(*middleware.UserClaims)
 		if !ok || claims == nil {
@@ -293,16 +340,16 @@ func main() {
 
 		// Use userId from JWT token, ignore any userId in query parameters for security
 		query := "?userId=" + claims.UserID
-		proxyRequest(w, r, cfg.NotificationsServiceURL+"/notifications"+query)
+		proxyRequest(w, r, cfg.NotificationsServiceURL+"/notifications"+query, appLogger)
 	})))
 
 	// SUBSCRIPTIONS SERVICE ROUTES
 	mux.HandleFunc("/api/subscriptions/health", globalRateLimit(func(w http.ResponseWriter, r *http.Request) {
-		proxyRequest(w, r, cfg.SubscriptionsServiceURL+"/health")
+		proxyRequest(w, r, cfg.SubscriptionsServiceURL+"/health", appLogger)
 	}))
 
 	// GET /api/subscriptions - get user subscriptions (requires auth)
-	mux.HandleFunc("/api/subscriptions", globalRateLimit(middleware.RequireAuth(cfg)(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/subscriptions", globalRateLimit(middleware.RequireAuth(cfg, appLogger)(func(w http.ResponseWriter, r *http.Request) {
 		// Get userId from JWT token
 		claims, ok := r.Context().Value(middleware.UserContextKey).(*middleware.UserClaims)
 		if !ok || claims == nil {
@@ -312,29 +359,29 @@ func main() {
 		}
 		// Add userId to query params
 		query := "?userId=" + claims.UserID
-		proxyRequest(w, r, cfg.SubscriptionsServiceURL+"/subscriptions"+query)
+		proxyRequest(w, r, cfg.SubscriptionsServiceURL+"/subscriptions"+query, appLogger)
 	})))
 
 	// POST /api/subscriptions/subscribe-artist - subscribe to artist (requires auth)
 	// DELETE /api/subscriptions/subscribe-artist - unsubscribe from artist (requires auth)
-	mux.HandleFunc("/api/subscriptions/subscribe-artist", globalRateLimit(middleware.RequireAuth(cfg)(func(w http.ResponseWriter, r *http.Request) {
-		proxyRequest(w, r, cfg.SubscriptionsServiceURL+"/subscribe-artist")
+	mux.HandleFunc("/api/subscriptions/subscribe-artist", globalRateLimit(middleware.RequireAuth(cfg, appLogger)(func(w http.ResponseWriter, r *http.Request) {
+		proxyRequest(w, r, cfg.SubscriptionsServiceURL+"/subscribe-artist", appLogger)
 	})))
 
 	// POST /api/subscriptions/subscribe-genre - subscribe to genre (requires auth)
 	// DELETE /api/subscriptions/subscribe-genre - unsubscribe from genre (requires auth)
-	mux.HandleFunc("/api/subscriptions/subscribe-genre", globalRateLimit(middleware.RequireAuth(cfg)(func(w http.ResponseWriter, r *http.Request) {
-		proxyRequest(w, r, cfg.SubscriptionsServiceURL+"/subscribe-genre")
+	mux.HandleFunc("/api/subscriptions/subscribe-genre", globalRateLimit(middleware.RequireAuth(cfg, appLogger)(func(w http.ResponseWriter, r *http.Request) {
+		proxyRequest(w, r, cfg.SubscriptionsServiceURL+"/subscribe-genre", appLogger)
 	})))
 
 	// RATINGS SERVICE ROUTES
 	mux.HandleFunc("/api/ratings/health", globalRateLimit(func(w http.ResponseWriter, r *http.Request) {
-		proxyRequest(w, r, cfg.RatingsServiceURL+"/health")
+		proxyRequest(w, r, cfg.RatingsServiceURL+"/health", appLogger)
 	}))
 
 	// Helper function to check if user is not admin
 	requireNonAdmin := func(next http.HandlerFunc) http.HandlerFunc {
-		return middleware.RequireAuth(cfg)(func(w http.ResponseWriter, r *http.Request) {
+		return middleware.RequireAuth(cfg, appLogger)(func(w http.ResponseWriter, r *http.Request) {
 			claims, ok := r.Context().Value(middleware.UserContextKey).(*middleware.UserClaims)
 			if !ok || claims == nil {
 				enableCORS(w, r)
@@ -373,7 +420,7 @@ func main() {
 
 		// Create new request with updated query
 		targetURL := cfg.RatingsServiceURL + "/rate-song?" + query
-		proxyRequest(w, r, targetURL)
+		proxyRequest(w, r, targetURL, appLogger)
 	})))
 
 	// DELETE /api/ratings/delete-rating - delete a rating (requires auth, non-admin only)
@@ -396,7 +443,7 @@ func main() {
 
 		// Create new request with updated query
 		targetURL := cfg.RatingsServiceURL + "/delete-rating?" + query
-		proxyRequest(w, r, targetURL)
+		proxyRequest(w, r, targetURL, appLogger)
 	})))
 
 	// GET /api/ratings/get-rating - get user's rating for a song (requires auth, non-admin only)
@@ -419,7 +466,7 @@ func main() {
 
 		// Create new request with updated query
 		targetURL := cfg.RatingsServiceURL + "/get-rating?" + query
-		proxyRequest(w, r, targetURL)
+		proxyRequest(w, r, targetURL, appLogger)
 	})))
 
 	// GET /api/ratings/recommendations - get personalized recommendations (requires auth, non-admin only)
@@ -440,9 +487,28 @@ func main() {
 
 		// Create new request with updated query
 		targetURL := cfg.RatingsServiceURL + "/recommendations?userId=" + userId
-		proxyRequest(w, r, targetURL)
+		proxyRequest(w, r, targetURL, appLogger)
 	})))
 
 	log.Println("API Gateway running on port", cfg.Port)
-	log.Fatal(http.ListenAndServe(":"+cfg.Port, mux))
+	
+	// Support HTTPS if certificates are provided
+	certFile := os.Getenv("TLS_CERT_FILE")
+	keyFile := os.Getenv("TLS_KEY_FILE")
+	if certFile != "" && keyFile != "" {
+		log.Println("Starting HTTPS server on port", cfg.Port)
+		server := &http.Server{
+			Addr:    ":" + cfg.Port,
+			Handler: mux,
+		}
+		if err := server.ListenAndServeTLS(certFile, keyFile); err != nil {
+			if appLogger != nil {
+				appLogger.LogTLSFailure("api-gateway", err.Error(), "")
+			}
+			log.Fatal("HTTPS server failed:", err)
+		}
+	} else {
+		log.Println("Starting HTTP server on port", cfg.Port)
+		log.Fatal(http.ListenAndServe(":"+cfg.Port, mux))
+	}
 }

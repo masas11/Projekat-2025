@@ -1,12 +1,15 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
 
 	"content-service/internal/dto"
 	"content-service/internal/events"
+	"content-service/internal/logger"
+	"content-service/internal/middleware"
 	"content-service/internal/model"
 	"content-service/internal/store"
 )
@@ -23,14 +26,25 @@ type SongHandler struct {
 	Repo                    *store.SongRepository
 	AlbumRepo               *store.AlbumRepository
 	SubscriptionsServiceURL string
+	Logger                  *logger.Logger
 }
 
-func NewSongHandler(repo *store.SongRepository, albumRepo *store.AlbumRepository, subscriptionsServiceURL string) *SongHandler {
+func NewSongHandler(repo *store.SongRepository, albumRepo *store.AlbumRepository, subscriptionsServiceURL string, log *logger.Logger) *SongHandler {
 	return &SongHandler{
 		Repo:                    repo,
 		AlbumRepo:               albumRepo,
 		SubscriptionsServiceURL: subscriptionsServiceURL,
+		Logger:                  log,
 	}
+}
+
+// getAdminIDFromContext extracts admin user ID from request context
+func getAdminIDFromSongContext(ctx context.Context) string {
+	claims, ok := ctx.Value(middleware.UserContextKey).(*middleware.UserClaims)
+	if !ok || claims == nil {
+		return ""
+	}
+	return claims.UserID
 }
 
 func (h *SongHandler) CreateSong(w http.ResponseWriter, r *http.Request) {
@@ -86,6 +100,18 @@ func (h *SongHandler) CreateSong(w http.ResponseWriter, r *http.Request) {
 	if err := h.Repo.Create(r.Context(), song); err != nil {
 		http.Error(w, "failed to create song: "+err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	// Log admin activity
+	if h.Logger != nil {
+		adminID := getAdminIDFromSongContext(r.Context())
+		h.Logger.LogAdminActivity(adminID, "CREATE_SONG", "songs", map[string]interface{}{
+			"songId":    song.ID,
+			"name":     song.Name,
+			"genre":    song.Genre,
+			"albumId":  song.AlbumID,
+			"artistIDs": song.ArtistIDs,
+		})
 	}
 
 	// Emit event for new song (asynchronous)
@@ -231,6 +257,16 @@ func (h *SongHandler) UpdateSong(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Store old state for logging
+	oldState := map[string]interface{}{
+		"name":        existingSong.Name,
+		"duration":    existingSong.Duration,
+		"genre":       existingSong.Genre,
+		"albumID":     existingSong.AlbumID,
+		"artistIDs":   existingSong.ArtistIDs,
+		"audioFileURL": existingSong.AudioFileURL,
+	}
+
 	// Update fields
 	existingSong.Name = req.Name
 	existingSong.Duration = req.Duration
@@ -239,9 +275,27 @@ func (h *SongHandler) UpdateSong(w http.ResponseWriter, r *http.Request) {
 	existingSong.ArtistIDs = req.ArtistIDs
 	existingSong.AudioFileURL = req.AudioFileURL
 
+	newState := map[string]interface{}{
+		"name":        existingSong.Name,
+		"duration":    existingSong.Duration,
+		"genre":       existingSong.Genre,
+		"albumID":     existingSong.AlbumID,
+		"artistIDs":   existingSong.ArtistIDs,
+		"audioFileURL": existingSong.AudioFileURL,
+	}
+
 	if err := h.Repo.Update(r.Context(), id, existingSong); err != nil {
 		http.Error(w, "failed to update song: "+err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	// Log admin activity and state change
+	if h.Logger != nil {
+		adminID := getAdminIDFromSongContext(r.Context())
+		h.Logger.LogAdminActivity(adminID, "UPDATE_SONG", "songs", map[string]interface{}{
+			"songId": id,
+		})
+		h.Logger.LogStateChange("song", oldState, newState, adminID)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -261,6 +315,9 @@ func (h *SongHandler) DeleteSong(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get song before deletion for logging
+	song, _ := h.Repo.GetByID(r.Context(), id)
+
 	if err := h.Repo.Delete(r.Context(), id); err != nil {
 		if err.Error() == "song not found" {
 			http.Error(w, "song not found", http.StatusNotFound)
@@ -268,6 +325,15 @@ func (h *SongHandler) DeleteSong(w http.ResponseWriter, r *http.Request) {
 		}
 		http.Error(w, "failed to delete song: "+err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	// Log admin activity
+	if h.Logger != nil {
+		adminID := getAdminIDFromSongContext(r.Context())
+		h.Logger.LogAdminActivity(adminID, "DELETE_SONG", "songs", map[string]interface{}{
+			"songId": id,
+			"name":   song.Name,
+		})
 	}
 
 	w.WriteHeader(http.StatusNoContent)

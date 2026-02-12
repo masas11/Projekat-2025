@@ -12,7 +12,10 @@ services:
       - USERS_SERVICE_URL=https://users-service:8001
       - CONTENT_SERVICE_URL=https://content-service:8002
       - NOTIFICATIONS_SERVICE_URL=https://notifications-service:8005
-# Volumes are now bind mounts in ./data/ directory
+      - TLS_CERT_FILE=/app/certs/server.crt
+      - TLS_KEY_FILE=/app/certs/server.key
+    volumes:
+      - ./certs:/app/certs:ro
 
   users-service:
     build:
@@ -27,7 +30,8 @@ services:
       - MONGODB_DATABASE=users_db
       - TLS_CERT_FILE=/app/certs/server.crt
       - TLS_KEY_FILE=/app/certs/server.key
-# Volumes are now bind mounts in ./data/ directory
+    volumes:
+      - ./certs:/app/certs:ro
 
   mongodb-users:
     image: mongo:7.0
@@ -48,7 +52,8 @@ services:
       - JWT_SECRET=your-secret-key-change-in-production
       - TLS_CERT_FILE=/app/certs/server.crt
       - TLS_KEY_FILE=/app/certs/server.key
-# Volumes are now bind mounts in ./data/ directory
+    volumes:
+      - ./certs:/app/certs:ro
 
   mongodb-content:
     image: mongo:7.0
@@ -75,7 +80,8 @@ services:
       - MONGODB_DATABASE=ratings_db
       - TLS_CERT_FILE=/app/certs/server.crt
       - TLS_KEY_FILE=/app/certs/server.key
-# Volumes are now bind mounts in ./data/ directory
+    volumes:
+      - ./certs:/app/certs:ro
 
   subscriptions-service:
     build:
@@ -88,7 +94,8 @@ services:
       - CONTENT_SERVICE_URL=https://content-service:8002
       - TLS_CERT_FILE=/app/certs/server.crt
       - TLS_KEY_FILE=/app/certs/server.key
-# Volumes are now bind mounts in ./data/ directory
+    volumes:
+      - ./certs:/app/certs:ro
 
   notifications-service:
     build:
@@ -102,7 +109,8 @@ services:
       - CASSANDRA_KEYSPACE=notifications_keyspace
       - TLS_CERT_FILE=/app/certs/server.crt
       - TLS_KEY_FILE=/app/certs/server.key
-# Volumes are now bind mounts in ./data/ directory
+    volumes:
+      - ./certs:/app/certs:ro
 
   cassandra:
     image: cassandra:4.1
@@ -120,7 +128,8 @@ services:
       - PORT=8006
       - TLS_CERT_FILE=/app/certs/server.crt
       - TLS_KEY_FILE=/app/certs/server.key
-# Volumes are now bind mounts in ./data/ directory
+    volumes:
+      - ./certs:/app/certs:ro
 
   analytics-service:
     build:
@@ -132,7 +141,8 @@ services:
       - PORT=8007
       - TLS_CERT_FILE=/app/certs/server.crt
       - TLS_KEY_FILE=/app/certs/server.key
-# Volumes are now bind mounts in ./data/ directory
+    volumes:
+      - ./certs:/app/certs:ro
 
 networks:
   music-streaming-network:

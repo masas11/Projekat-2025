@@ -5,10 +5,12 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 
 	"api-gateway/config"
+	"api-gateway/internal/logger"
 )
 
 type contextKey string
@@ -34,8 +36,26 @@ func enableCORS(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Credentials", "true")
 }
 
+// getClientIP extracts the client IP address from the request
+func getClientIP(r *http.Request) string {
+	forwarded := r.Header.Get("X-Forwarded-For")
+	if forwarded != "" {
+		ips := strings.Split(forwarded, ",")
+		return strings.TrimSpace(ips[0])
+	}
+	realIP := r.Header.Get("X-Real-IP")
+	if realIP != "" {
+		return realIP
+	}
+	ip := r.RemoteAddr
+	if idx := strings.LastIndex(ip, ":"); idx != -1 {
+		ip = ip[:idx]
+	}
+	return ip
+}
+
 // JWTAuth validates JWT token and extracts user claims
-func JWTAuth(cfg *config.Config) func(http.HandlerFunc) http.HandlerFunc {
+func JWTAuth(cfg *config.Config, log *logger.Logger) func(http.HandlerFunc) http.HandlerFunc {
 	return func(next http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			// Handle OPTIONS preflight requests - allow them through without auth
@@ -45,8 +65,12 @@ func JWTAuth(cfg *config.Config) func(http.HandlerFunc) http.HandlerFunc {
 				return
 			}
 
+			ipAddress := getClientIP(r)
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" {
+				if log != nil {
+					log.LogAccessControlFailure("", r.URL.Path, r.Method, "missing authorization header")
+				}
 				enableCORS(w, r)
 				http.Error(w, "authorization header required", http.StatusUnauthorized)
 				return
@@ -55,12 +79,21 @@ func JWTAuth(cfg *config.Config) func(http.HandlerFunc) http.HandlerFunc {
 			// Extract token from "Bearer <token>"
 			parts := strings.Split(authHeader, " ")
 			if len(parts) != 2 || parts[0] != "Bearer" {
+				if log != nil {
+					log.LogAccessControlFailure("", r.URL.Path, r.Method, "invalid authorization header format")
+				}
 				enableCORS(w, r)
 				http.Error(w, "invalid authorization header format", http.StatusUnauthorized)
 				return
 			}
 
 			tokenString := parts[1]
+			tokenPrefix := ""
+			if len(tokenString) > 10 {
+				tokenPrefix = tokenString[:10] + "..."
+			} else {
+				tokenPrefix = "***"
+			}
 
 			// Parse and validate token
 			claims := &UserClaims{}
@@ -78,8 +111,38 @@ func JWTAuth(cfg *config.Config) func(http.HandlerFunc) http.HandlerFunc {
 			})
 
 			if err != nil || !token.Valid {
+				reason := "invalid token"
+				if err != nil {
+					if strings.Contains(err.Error(), "expired") || strings.Contains(err.Error(), "exp") {
+						reason = "expired token"
+						if log != nil && claims.UserID != "" {
+							log.LogExpiredToken(claims.UserID, ipAddress)
+						} else {
+							log.LogInvalidToken(tokenPrefix, reason, ipAddress)
+						}
+					} else {
+						reason = err.Error()
+						if log != nil {
+							log.LogInvalidToken(tokenPrefix, reason, ipAddress)
+						}
+					}
+				} else {
+					if log != nil {
+						log.LogInvalidToken(tokenPrefix, reason, ipAddress)
+					}
+				}
 				enableCORS(w, r)
 				http.Error(w, "invalid or expired token", http.StatusUnauthorized)
+				return
+			}
+
+			// Check if token is expired
+			if claims.ExpiresAt != nil && claims.ExpiresAt.Time.Before(time.Now()) {
+				if log != nil {
+					log.LogExpiredToken(claims.UserID, ipAddress)
+				}
+				enableCORS(w, r)
+				http.Error(w, "expired token", http.StatusUnauthorized)
 				return
 			}
 
@@ -91,23 +154,30 @@ func JWTAuth(cfg *config.Config) func(http.HandlerFunc) http.HandlerFunc {
 }
 
 // RequireAuth requires valid JWT token
-func RequireAuth(cfg *config.Config) func(http.HandlerFunc) http.HandlerFunc {
-	return JWTAuth(cfg)
+func RequireAuth(cfg *config.Config, log *logger.Logger) func(http.HandlerFunc) http.HandlerFunc {
+	return JWTAuth(cfg, log)
 }
 
 // RequireRole checks if the user has the required role
-func RequireRole(requiredRole string, cfg *config.Config) func(http.HandlerFunc) http.HandlerFunc {
+func RequireRole(requiredRole string, cfg *config.Config, log *logger.Logger) func(http.HandlerFunc) http.HandlerFunc {
 	return func(next http.HandlerFunc) http.HandlerFunc {
-		auth := JWTAuth(cfg)
+		auth := JWTAuth(cfg, log)
 		return auth(func(w http.ResponseWriter, r *http.Request) {
 			claims, ok := r.Context().Value(UserContextKey).(*UserClaims)
 			if !ok || claims == nil {
+				if log != nil {
+					log.LogAccessControlFailure("", r.URL.Path, r.Method, "missing user claims in context")
+				}
 				enableCORS(w, r)
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
 
 			if claims.Role != requiredRole {
+				if log != nil {
+					log.LogAccessControlFailure(claims.UserID, r.URL.Path, r.Method, 
+						"insufficient permissions: required role "+requiredRole+", user role "+claims.Role)
+				}
 				enableCORS(w, r)
 				http.Error(w, "forbidden: "+requiredRole+" access required", http.StatusForbidden)
 				return
@@ -119,7 +189,7 @@ func RequireRole(requiredRole string, cfg *config.Config) func(http.HandlerFunc)
 }
 
 // OptionalAuth optionally validates JWT token if present
-func OptionalAuth(cfg *config.Config) func(http.HandlerFunc) http.HandlerFunc {
+func OptionalAuth(cfg *config.Config, log *logger.Logger) func(http.HandlerFunc) http.HandlerFunc {
 	return func(next http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
@@ -127,6 +197,12 @@ func OptionalAuth(cfg *config.Config) func(http.HandlerFunc) http.HandlerFunc {
 				parts := strings.Split(authHeader, " ")
 				if len(parts) == 2 && parts[0] == "Bearer" {
 					tokenString := parts[1]
+					tokenPrefix := ""
+					if len(tokenString) > 10 {
+						tokenPrefix = tokenString[:10] + "..."
+					} else {
+						tokenPrefix = "***"
+					}
 					claims := &UserClaims{}
 					token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
 						if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -140,8 +216,22 @@ func OptionalAuth(cfg *config.Config) func(http.HandlerFunc) http.HandlerFunc {
 					})
 
 					if err == nil && token.Valid {
-						ctx := context.WithValue(r.Context(), UserContextKey, claims)
-						r = r.WithContext(ctx)
+						// Check expiration
+						if claims.ExpiresAt != nil && claims.ExpiresAt.Time.Before(time.Now()) {
+							if log != nil {
+								log.LogExpiredToken(claims.UserID, getClientIP(r))
+							}
+						} else {
+							ctx := context.WithValue(r.Context(), UserContextKey, claims)
+							r = r.WithContext(ctx)
+						}
+					} else if err != nil && log != nil {
+						reason := err.Error()
+						if strings.Contains(reason, "expired") {
+							log.LogExpiredToken(claims.UserID, getClientIP(r))
+						} else {
+							log.LogInvalidToken(tokenPrefix, reason, getClientIP(r))
+						}
 					}
 				}
 			}

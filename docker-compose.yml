@@ -7,11 +7,15 @@ services:
       - "8081:8080"
     environment:
       - PORT=8080
-      - USERS_SERVICE_URL=http://users-service:8001
-      - CONTENT_SERVICE_URL=http://content-service:8002
-      - NOTIFICATIONS_SERVICE_URL=http://notifications-service:8005
-      - SUBSCRIPTIONS_SERVICE_URL=http://subscriptions-service:8004
-      - RATINGS_SERVICE_URL=http://ratings-service:8003
+      - USERS_SERVICE_URL=https://users-service:8001
+      - CONTENT_SERVICE_URL=https://content-service:8002
+      - NOTIFICATIONS_SERVICE_URL=https://notifications-service:8005
+      - SUBSCRIPTIONS_SERVICE_URL=https://subscriptions-service:8004
+      - RATINGS_SERVICE_URL=https://ratings-service:8003
+      - TLS_CERT_FILE=/app/certs/server.crt
+      - TLS_KEY_FILE=/app/certs/server.key
+    volumes:
+      - ./certs:/app/certs:ro
     depends_on:
       - users-service
       - content-service
@@ -32,6 +36,20 @@ services:
       - JWT_SECRET=your-secret-key-change-in-production
       - MONGODB_URI=mongodb://mongodb-users:27017
       - MONGODB_DATABASE=users_db
+      - TLS_CERT_FILE=/app/certs/server.crt
+      - TLS_KEY_FILE=/app/certs/server.key
+      # SMTP Configuration (set these to enable real email sending)
+      # Option 1: Create .env file with your SMTP credentials (recommended)
+      # Option 2: Replace the default values below directly
+      # For Gmail: Create App Password at https://myaccount.google.com/apppasswords
+      - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USERNAME=${SMTP_USERNAME:-your-email@gmail.com}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-your-app-password-here}
+      - SMTP_FROM=${SMTP_FROM:-your-email@gmail.com}
+      - FRONTEND_URL=${FRONTEND_URL:-https://localhost:3000}
+    volumes:
+      - ./certs:/app/certs:ro
     depends_on:
       mongodb-users:
         condition: service_healthy
@@ -64,7 +82,11 @@ services:
       - MONGODB_URI=mongodb://mongodb-content:27017
       - MONGODB_DATABASE=music_streaming
       - JWT_SECRET=your-secret-key-change-in-production
-      - SUBSCRIPTIONS_SERVICE_URL=http://subscriptions-service:8004
+      - SUBSCRIPTIONS_SERVICE_URL=https://subscriptions-service:8004
+      - TLS_CERT_FILE=/app/certs/server.crt
+      - TLS_KEY_FILE=/app/certs/server.key
+    volumes:
+      - ./certs:/app/certs:ro
     depends_on:
       mongodb-content:
         condition: service_healthy
@@ -109,9 +131,13 @@ services:
       - "8003:8003"
     environment:
       - PORT=8003
-      - CONTENT_SERVICE_URL=http://content-service:8002
+      - CONTENT_SERVICE_URL=https://content-service:8002
       - MONGODB_URI=mongodb://mongodb-ratings:27017
       - MONGODB_DATABASE=ratings_db
+      - TLS_CERT_FILE=/app/certs/server.crt
+      - TLS_KEY_FILE=/app/certs/server.key
+    volumes:
+      - ./certs:/app/certs:ro
     depends_on:
       content-service:
         condition: service_started
@@ -143,10 +169,14 @@ services:
       - "8004:8004"
     environment:
       - PORT=8004
-      - CONTENT_SERVICE_URL=http://content-service:8002
+      - CONTENT_SERVICE_URL=https://content-service:8002
       - MONGODB_URI=mongodb://mongodb-subscriptions:27017
       - MONGODB_DATABASE=subscriptions_db
-      - NOTIFICATIONS_SERVICE_URL=http://notifications-service:8005
+      - NOTIFICATIONS_SERVICE_URL=https://notifications-service:8005
+      - TLS_CERT_FILE=/app/certs/server.crt
+      - TLS_KEY_FILE=/app/certs/server.key
+    volumes:
+      - ./certs:/app/certs:ro
     depends_on:
       content-service:
         condition: service_started
@@ -167,6 +197,10 @@ services:
       - PORT=8005
       - CASSANDRA_HOSTS=cassandra:9042
       - CASSANDRA_KEYSPACE=notifications_keyspace
+      - TLS_CERT_FILE=/app/certs/server.crt
+      - TLS_KEY_FILE=/app/certs/server.key
+    volumes:
+      - ./certs:/app/certs:ro
     depends_on:
       - cassandra
     networks:
@@ -193,6 +227,10 @@ services:
       - "8006:8006"
     environment:
       - PORT=8006
+      - TLS_CERT_FILE=/app/certs/server.crt
+      - TLS_KEY_FILE=/app/certs/server.key
+    volumes:
+      - ./certs:/app/certs:ro
     networks:
       - music-streaming-network
 
@@ -204,6 +242,10 @@ services:
       - "8007:8007"
     environment:
       - PORT=8007
+      - TLS_CERT_FILE=/app/certs/server.crt
+      - TLS_KEY_FILE=/app/certs/server.key
+    volumes:
+      - ./certs:/app/certs:ro
     networks:
       - music-streaming-network
 

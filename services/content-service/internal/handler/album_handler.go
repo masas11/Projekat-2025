@@ -1,12 +1,15 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
 
 	"content-service/internal/dto"
 	"content-service/internal/events"
+	"content-service/internal/logger"
+	"content-service/internal/middleware"
 	"content-service/internal/model"
 	"content-service/internal/store"
 )
@@ -22,13 +25,24 @@ func extractAlbumID(path string) string {
 type AlbumHandler struct {
 	Repo                    *store.AlbumRepository
 	SubscriptionsServiceURL string
+	Logger                  *logger.Logger
 }
 
-func NewAlbumHandler(repo *store.AlbumRepository, subscriptionsServiceURL string) *AlbumHandler {
+func NewAlbumHandler(repo *store.AlbumRepository, subscriptionsServiceURL string, log *logger.Logger) *AlbumHandler {
 	return &AlbumHandler{
 		Repo:                    repo,
 		SubscriptionsServiceURL: subscriptionsServiceURL,
+		Logger:                  log,
 	}
+}
+
+// getAdminID extracts admin user ID from request context
+func getAdminIDFromContext(ctx context.Context) string {
+	claims, ok := ctx.Value(middleware.UserContextKey).(*middleware.UserClaims)
+	if !ok || claims == nil {
+		return ""
+	}
+	return claims.UserID
 }
 
 func (h *AlbumHandler) CreateAlbum(w http.ResponseWriter, r *http.Request) {
@@ -67,6 +81,17 @@ func (h *AlbumHandler) CreateAlbum(w http.ResponseWriter, r *http.Request) {
 	if err := h.Repo.Create(r.Context(), album); err != nil {
 		http.Error(w, "failed to create album: "+err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	// Log admin activity
+	if h.Logger != nil {
+		adminID := getAdminIDFromContext(r.Context())
+		h.Logger.LogAdminActivity(adminID, "CREATE_ALBUM", "albums", map[string]interface{}{
+			"albumId":   album.ID,
+			"name":      album.Name,
+			"genre":     album.Genre,
+			"artistIDs": album.ArtistIDs,
+		})
 	}
 
 	// Emit event for new album (asynchronous)
@@ -196,15 +221,39 @@ func (h *AlbumHandler) UpdateAlbum(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Store old state for logging
+	oldState := map[string]interface{}{
+		"name":        existingAlbum.Name,
+		"releaseDate": existingAlbum.ReleaseDate,
+		"genre":       existingAlbum.Genre,
+		"artistIDs":   existingAlbum.ArtistIDs,
+	}
+
 	// Update fields
 	existingAlbum.Name = req.Name
 	existingAlbum.ReleaseDate = req.ReleaseDate
 	existingAlbum.Genre = req.Genre
 	existingAlbum.ArtistIDs = req.ArtistIDs
 
+	newState := map[string]interface{}{
+		"name":        existingAlbum.Name,
+		"releaseDate": existingAlbum.ReleaseDate,
+		"genre":       existingAlbum.Genre,
+		"artistIDs":   existingAlbum.ArtistIDs,
+	}
+
 	if err := h.Repo.Update(r.Context(), id, existingAlbum); err != nil {
 		http.Error(w, "failed to update album: "+err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	// Log admin activity and state change
+	if h.Logger != nil {
+		adminID := getAdminIDFromContext(r.Context())
+		h.Logger.LogAdminActivity(adminID, "UPDATE_ALBUM", "albums", map[string]interface{}{
+			"albumId": id,
+		})
+		h.Logger.LogStateChange("album", oldState, newState, adminID)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -224,6 +273,9 @@ func (h *AlbumHandler) DeleteAlbum(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get album before deletion for logging
+	album, _ := h.Repo.GetByID(r.Context(), id)
+
 	if err := h.Repo.Delete(r.Context(), id); err != nil {
 		if err.Error() == "album not found" {
 			http.Error(w, "album not found", http.StatusNotFound)
@@ -231,6 +283,15 @@ func (h *AlbumHandler) DeleteAlbum(w http.ResponseWriter, r *http.Request) {
 		}
 		http.Error(w, "failed to delete album: "+err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	// Log admin activity
+	if h.Logger != nil {
+		adminID := getAdminIDFromContext(r.Context())
+		h.Logger.LogAdminActivity(adminID, "DELETE_ALBUM", "albums", map[string]interface{}{
+			"albumId": id,
+			"name":    album.Name,
+		})
 	}
 
 	w.WriteHeader(http.StatusNoContent)

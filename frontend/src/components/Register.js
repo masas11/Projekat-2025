@@ -13,6 +13,7 @@ const Register = () => {
   });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [verificationLink, setVerificationLink] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
@@ -53,12 +54,25 @@ const Register = () => {
     }
 
     setLoading(true);
+    setVerificationLink('');
 
     try {
-      await api.register(formData);
-      setSuccess('Uspešna registracija! Email za verifikaciju je poslat. Proverite svoj email i kliknite na link za verifikaciju.');
+      const response = await api.register(formData);
+      
+      // Check if verification link is in response (when SMTP is not configured)
+      if (response.verificationLink) {
+        setVerificationLink(response.verificationLink);
+        setSuccess('Uspešna registracija! SMTP nije konfigurisan, koristite link ispod za verifikaciju:');
+      } else {
+        setSuccess('Uspešna registracija! Email za verifikaciju je poslat. Proverite svoj email i kliknite na link za verifikaciju.');
+      }
     } catch (err) {
-      setError(err.message || 'Greška pri registraciji');
+      // Better error handling for 409 Conflict (user already exists)
+      if (err.message && (err.message.includes('409') || err.message.includes('already exists') || err.message.includes('user already exists'))) {
+        setError('Korisnik sa ovim korisničkim imenom ili email adresom već postoji. Molimo koristite drugačije podatke ili se prijavite.');
+      } else {
+        setError(err.message || 'Greška pri registraciji');
+      }
     } finally {
       setLoading(false);
     }
@@ -133,7 +147,47 @@ const Register = () => {
             />
           </div>
           {error && <div className="error">{error}</div>}
-          {success && <div className="success">{success}</div>}
+          {success && (
+            <div className="success">
+              <p>{success}</p>
+              {verificationLink && (
+                <div style={{ marginTop: '15px', padding: '15px', backgroundColor: '#f0f0f0', borderRadius: '5px' }}>
+                  <p style={{ marginBottom: '10px', fontWeight: 'bold' }}>Verifikacioni link:</p>
+                  <a 
+                    href={verificationLink} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    style={{ 
+                      color: '#FF9800', 
+                      wordBreak: 'break-all',
+                      textDecoration: 'underline',
+                      display: 'block',
+                      marginBottom: '10px'
+                    }}
+                  >
+                    {verificationLink}
+                  </a>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(verificationLink);
+                      alert('Link je kopiran u clipboard!');
+                    }}
+                    style={{
+                      padding: '8px 15px',
+                      backgroundColor: '#FF9800',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '14px'
+                    }}
+                  >
+                    Kopiraj link
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
           <button type="submit" className="btn btn-primary" disabled={loading}>
             {loading ? 'Registracija...' : 'Registruj se'}
           </button>

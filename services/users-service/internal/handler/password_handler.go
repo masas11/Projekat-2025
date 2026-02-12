@@ -127,8 +127,7 @@ func (h *PasswordHandler) RequestPasswordReset(w http.ResponseWriter, r *http.Re
 	// Send password reset email (URL encode token to handle special characters)
 	// Note: Link points to frontend, which will call the API
 	encodedToken := url.QueryEscape(token)
-	// Assuming frontend runs on port 3000
-	resetURL := "http://localhost:3000/reset-password?token=" + encodedToken
+	resetURL := h.Config.FrontendURL + "/reset-password?token=" + encodedToken
 	mail.SendPasswordResetEmail(user.Email, resetURL)
 
 	w.Header().Set("Content-Type", "application/json")

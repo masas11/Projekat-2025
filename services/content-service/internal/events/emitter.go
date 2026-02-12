@@ -2,9 +2,11 @@ package events
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -43,6 +45,7 @@ type NewSongEvent struct {
 }
 
 // EmitEvent sends an event to subscriptions-service asynchronously
+// Note: Logger parameter is optional - if nil, uses standard log
 func EmitEvent(subscriptionsServiceURL string, event interface{}) {
 	go func() {
 		eventJSON, err := json.Marshal(event)
@@ -60,13 +63,25 @@ func EmitEvent(subscriptionsServiceURL string, event interface{}) {
 
 		req.Header.Set("Content-Type", "application/json")
 
+		// Configure TLS transport for HTTPS
+		tr := &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}
 		client := &http.Client{
-			Timeout: 2 * time.Second,
+			Timeout:   2 * time.Second,
+			Transport: tr,
 		}
 
 		resp, err := client.Do(req)
 		if err != nil {
-			log.Printf("Failed to emit event to subscriptions-service: %v", err)
+			errorMsg := err.Error()
+			// Check if it's a TLS error
+			if strings.Contains(errorMsg, "tls") || strings.Contains(errorMsg, "TLS") ||
+				strings.Contains(errorMsg, "certificate") || strings.Contains(errorMsg, "handshake") {
+				log.Printf("[TLS_FAILURE] Failed to emit event to subscriptions-service: %v", errorMsg)
+			} else {
+				log.Printf("Failed to emit event to subscriptions-service: %v", err)
+			}
 			return
 		}
 		defer resp.Body.Close()

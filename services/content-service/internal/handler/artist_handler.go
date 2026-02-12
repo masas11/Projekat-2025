@@ -1,12 +1,15 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
 
 	"content-service/internal/dto"
 	"content-service/internal/events"
+	"content-service/internal/logger"
+	"content-service/internal/middleware"
 	"content-service/internal/model"
 	"content-service/internal/store"
 )
@@ -24,13 +27,24 @@ func extractArtistID(path string) string {
 type ArtistHandler struct {
 	Repo                    *store.ArtistRepository
 	SubscriptionsServiceURL string
+	Logger                  *logger.Logger
 }
 
-func NewArtistHandler(repo *store.ArtistRepository, subscriptionsServiceURL string) *ArtistHandler {
+func NewArtistHandler(repo *store.ArtistRepository, subscriptionsServiceURL string, log *logger.Logger) *ArtistHandler {
 	return &ArtistHandler{
 		Repo:                    repo,
 		SubscriptionsServiceURL: subscriptionsServiceURL,
+		Logger:                  log,
 	}
+}
+
+// getAdminID extracts admin user ID from request context
+func getAdminID(ctx context.Context) string {
+	claims, ok := ctx.Value(middleware.UserContextKey).(*middleware.UserClaims)
+	if !ok || claims == nil {
+		return ""
+	}
+	return claims.UserID
 }
 
 func (h *ArtistHandler) CreateArtist(w http.ResponseWriter, r *http.Request) {
@@ -68,6 +82,16 @@ func (h *ArtistHandler) CreateArtist(w http.ResponseWriter, r *http.Request) {
 	if err := h.Repo.Create(r.Context(), artist); err != nil {
 		http.Error(w, "failed to create artist: "+err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	// Log admin activity
+	if h.Logger != nil {
+		adminID := getAdminID(r.Context())
+		h.Logger.LogAdminActivity(adminID, "CREATE_ARTIST", "artists", map[string]interface{}{
+			"artistId": artist.ID,
+			"name":     artist.Name,
+			"genres":   artist.Genres,
+		})
 	}
 
 	// Emit event for new artist (asynchronous)
@@ -124,14 +148,37 @@ func (h *ArtistHandler) UpdateArtist(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Store old state for logging
+	oldState := map[string]interface{}{
+		"name":      existingArtist.Name,
+		"biography": existingArtist.Biography,
+		"genres":    existingArtist.Genres,
+	}
+
 	// Update fields
 	existingArtist.Name = req.Name
 	existingArtist.Biography = req.Biography
 	existingArtist.Genres = req.Genres
 
+	newState := map[string]interface{}{
+		"name":      existingArtist.Name,
+		"biography": existingArtist.Biography,
+		"genres":    existingArtist.Genres,
+	}
+
 	if err := h.Repo.Update(r.Context(), id, existingArtist); err != nil {
 		http.Error(w, "failed to update artist: "+err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	// Log admin activity and state change
+	if h.Logger != nil {
+		adminID := getAdminID(r.Context())
+		h.Logger.LogAdminActivity(adminID, "UPDATE_ARTIST", "artists", map[string]interface{}{
+			"artistId": id,
+		})
+		// Log state change if there are unexpected changes
+		h.Logger.LogStateChange("artist", oldState, newState, adminID)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -196,6 +243,9 @@ func (h *ArtistHandler) DeleteArtist(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get artist before deletion for logging
+	artist, _ := h.Repo.GetByID(r.Context(), id)
+
 	if err := h.Repo.Delete(r.Context(), id); err != nil {
 		if err.Error() == "artist not found" {
 			http.Error(w, "artist not found", http.StatusNotFound)
@@ -203,6 +253,15 @@ func (h *ArtistHandler) DeleteArtist(w http.ResponseWriter, r *http.Request) {
 		}
 		http.Error(w, "failed to delete artist: "+err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	// Log admin activity
+	if h.Logger != nil {
+		adminID := getAdminID(r.Context())
+		h.Logger.LogAdminActivity(adminID, "DELETE_ARTIST", "artists", map[string]interface{}{
+			"artistId": id,
+			"name":     artist.Name,
+		})
 	}
 
 	w.WriteHeader(http.StatusNoContent)

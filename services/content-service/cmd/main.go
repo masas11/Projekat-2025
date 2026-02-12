@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 
 	"content-service/config"
 	"content-service/internal/handler"
+	"content-service/internal/logger"
 	"content-service/internal/middleware"
 	"content-service/internal/store"
 )
@@ -24,15 +26,27 @@ func main() {
 	defer dbStore.Close()
 	log.Println("Connected to MongoDB")
 
+	// Initialize logger
+	logDir := os.Getenv("LOG_DIR")
+	if logDir == "" {
+		logDir = filepath.Join(".", "logs")
+	}
+	appLogger, err := logger.NewLogger(logDir)
+	if err != nil {
+		log.Printf("Warning: Failed to initialize logger: %v, using stdout", err)
+		appLogger = logger.NewStdoutLogger()
+	}
+	defer appLogger.Close()
+
 	// Initialize repositories
 	artistRepo := store.NewArtistRepository(dbStore.Database)
 	albumRepo := store.NewAlbumRepository(dbStore.Database)
 	songRepo := store.NewSongRepository(dbStore.Database)
 
 	// Initialize handlers
-	artistHandler := handler.NewArtistHandler(artistRepo, cfg.SubscriptionsServiceURL)
-	albumHandler := handler.NewAlbumHandler(albumRepo, cfg.SubscriptionsServiceURL)
-	songHandler := handler.NewSongHandler(songRepo, albumRepo, cfg.SubscriptionsServiceURL)
+	artistHandler := handler.NewArtistHandler(artistRepo, cfg.SubscriptionsServiceURL, appLogger)
+	albumHandler := handler.NewAlbumHandler(albumRepo, cfg.SubscriptionsServiceURL, appLogger)
+	songHandler := handler.NewSongHandler(songRepo, albumRepo, cfg.SubscriptionsServiceURL, appLogger)
 
 	mux := http.NewServeMux()
 
@@ -218,5 +232,24 @@ func main() {
 	})
 
 	log.Println("Content service running on port", cfg.Port)
-	log.Fatal(http.ListenAndServe(":"+cfg.Port, mux))
+	
+	// Support HTTPS if certificates are provided
+	certFile := os.Getenv("TLS_CERT_FILE")
+	keyFile := os.Getenv("TLS_KEY_FILE")
+	if certFile != "" && keyFile != "" {
+		log.Println("Starting HTTPS server on port", cfg.Port)
+		server := &http.Server{
+			Addr:    ":" + cfg.Port,
+			Handler: mux,
+		}
+		if err := server.ListenAndServeTLS(certFile, keyFile); err != nil {
+			if appLogger != nil {
+				appLogger.LogTLSFailure("content-service", err.Error(), "")
+			}
+			log.Fatal("HTTPS server failed:", err)
+		}
+	} else {
+		log.Println("Starting HTTP server on port", cfg.Port)
+		log.Fatal(http.ListenAndServe(":"+cfg.Port, mux))
+	}
 }

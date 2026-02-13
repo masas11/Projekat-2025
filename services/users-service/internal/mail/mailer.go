@@ -1,8 +1,10 @@
 package mail
 
 import (
+	"crypto/tls"
 	"fmt"
 	"log"
+	"net/smtp"
 	"users-service/config"
 
 	"gopkg.in/mail.v2"
@@ -17,10 +19,30 @@ var (
 func Init(cfg *config.Config) {
 	mailConfig = cfg
 
-	// Only initialize mailer if SMTP credentials are provided
-	if cfg.SMTPHost != "" && cfg.SMTPUsername != "" && cfg.SMTPPassword != "" {
-		mailer = mail.NewDialer(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUsername, cfg.SMTPPassword)
-		mailer.StartTLSPolicy = mail.MandatoryStartTLS
+	// Initialize mailer if SMTP host is provided
+	// MailHog doesn't require authentication, so username/password are optional
+	if cfg.SMTPHost != "" {
+		// Use empty strings for username/password if not provided (for MailHog)
+		username := cfg.SMTPUsername
+		password := cfg.SMTPPassword
+		if username == "" {
+			username = "mailhog"
+		}
+		if password == "" {
+			password = "mailhog"
+		}
+		mailer = mail.NewDialer(cfg.SMTPHost, cfg.SMTPPort, username, password)
+		// MailHog doesn't use TLS, so disable StartTLS for MailHog
+		if cfg.SMTPHost == "mailhog" {
+			mailer.StartTLSPolicy = mail.NoStartTLS
+			// Explicitly disable TLS for MailHog
+			mailer.TLSConfig = &tls.Config{
+				InsecureSkipVerify: true,
+				ServerName:         "",
+			}
+		} else {
+			mailer.StartTLSPolicy = mail.MandatoryStartTLS
+		}
 		log.Printf("[EMAIL] SMTP configured: %s:%d (from: %s)", cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPFrom)
 	} else {
 		log.Printf("[EMAIL] SMTP not configured - using mock mode")
@@ -30,13 +52,19 @@ func Init(cfg *config.Config) {
 // sendEmail is a helper function to send emails
 func sendEmail(to, subject, body string) error {
 	// If SMTP is not configured, use mock mode
-	if mailConfig == nil || mailConfig.SMTPHost == "" || mailConfig.SMTPUsername == "" || mailConfig.SMTPPassword == "" {
+	if mailConfig == nil || mailConfig.SMTPHost == "" {
 		log.Printf("[MOCK EMAIL] To: %s, Subject: %s", to, subject)
 		log.Printf("[MOCK EMAIL] NOTE: SMTP not configured. Email not actually sent. Configure SMTP in docker-compose.yml to send real emails.")
 		return nil
 	}
 
-	// Create new email message
+	// Use net/smtp directly for MailHog (doesn't support TLS)
+	if mailConfig.SMTPHost == "mailhog" {
+		log.Printf("[EMAIL] Using MailHog direct SMTP for %s", to)
+		return sendEmailViaMailHog(to, subject, body)
+	}
+
+	// Use gopkg.in/mail.v2 for other SMTP servers (with TLS)
 	m := mail.NewMessage()
 	m.SetHeader("From", mailConfig.SMTPFrom)
 	m.SetHeader("To", to)
@@ -49,6 +77,37 @@ func sendEmail(to, subject, body string) error {
 	}
 
 	log.Printf("[EMAIL] Sent successfully to %s: %s", to, subject)
+	return nil
+}
+
+// sendEmailViaMailHog sends email using net/smtp directly (no TLS required)
+func sendEmailViaMailHog(to, subject, body string) error {
+	addr := fmt.Sprintf("%s:%d", mailConfig.SMTPHost, mailConfig.SMTPPort)
+	log.Printf("[EMAIL] Connecting to MailHog at %s", addr)
+	
+	// Create email message
+	from := mailConfig.SMTPFrom
+	if from == "" {
+		from = "noreply@musicstreaming.com"
+	}
+	
+	msg := []byte(fmt.Sprintf("From: %s\r\n", from) +
+		fmt.Sprintf("To: %s\r\n", to) +
+		fmt.Sprintf("Subject: %s\r\n", subject) +
+		"MIME-Version: 1.0\r\n" +
+		"Content-Type: text/html; charset=UTF-8\r\n" +
+		"\r\n" +
+		body + "\r\n")
+
+	// Send email via SMTP (no auth, no TLS for MailHog)
+	// nil auth means no authentication
+	err := smtp.SendMail(addr, nil, from, []string{to}, msg)
+	if err != nil {
+		log.Printf("[EMAIL ERROR] MailHog send failed: %v", err)
+		return fmt.Errorf("failed to send email via MailHog: %w", err)
+	}
+
+	log.Printf("[EMAIL] Sent successfully to %s via MailHog: %s", to, subject)
 	return nil
 }
 

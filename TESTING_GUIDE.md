@@ -1,310 +1,279 @@
-# Detaljni Vodič za Testiranje - Ocena 7
+# Vodič za Testiranje Sistema
 
-## 🚀 Priprema
+Ovaj dokument objašnjava kako da testirate sve funkcionalnosti sistema, uključujući HTTPS sertifikate, komunikaciju između servisa, MailHog, i sigurnosne mehanizme.
 
-### 1.1 Pokretanje svih servisa
-```bash
-# U root folderu projekta
-docker-compose up -d
+## 📋 Preduslovi
 
-# Proveri da li svi rade
+1. **Docker i Docker Compose su pokrenuti**
+2. **Svi servisi su pokrenuti**: `docker-compose up -d`
+3. **Sertifikati su generisani**: `certs/server.crt` i `certs/server.key` postoje
+
+## 🔍 1. Provera Statusa Servisa
+
+### Provera da li su svi servisi pokrenuti:
+```powershell
 docker-compose ps
 ```
 
-### 1.2 Proveri health endpoint-e
-```bash
-# API Gateway
-curl http://localhost:8080/health
+Svi servisi treba da budu u statusu "Up".
 
-# Content Service
-curl http://localhost:8081/health
+### Provera logova:
+```powershell
+# API Gateway
+docker logs projekat-2025-1-api-gateway-1 --tail 20
 
 # Users Service
-curl http://localhost:8082/health
+docker logs projekat-2025-1-users-service-1 --tail 20
 
-# Ratings Service
-curl http://localhost:8083/health
-
-# Subscriptions Service
-curl http://localhost:8084/health
-
-# Notifications Service
-curl http://localhost:8085/health
+# MailHog
+docker logs projekat-2025-1-mailhog-1 --tail 10
 ```
 
----
+## 🔐 2. Testiranje HTTPS Komunikacije Između Servisa
 
-## 📋 Testiranje Funkcionalnosti
+### Test 1: Provera da li servisi koriste HTTPS interno
 
-### ✅ Zahtevi za Ocenu 6
+Proverite logove servisa - trebalo bi da vidite:
+- `Starting HTTPS server on port XXXX` (za servise koji imaju sertifikate)
+- `Starting HTTP server on port XXXX` (za servise bez sertifikata)
 
-#### 1.1 Registracija naloga
-```bash
-# POST request
-curl -X POST http://localhost:8080/api/users/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "testuser",
-    "password": "StrongPass123!",
-    "email": "test@example.com",
-    "firstName": "Test",
-    "lastName": "User"
-  }'
+```powershell
+# Provera Users Service
+docker logs projekat-2025-1-users-service-1 | Select-String "HTTPS|HTTP"
 
-# Očekivani odgovor: 201 Created
-# Proveri email za verifikaciju
+# Provera Content Service  
+docker logs projekat-2025-1-content-service-1 | Select-String "HTTPS|HTTP"
+
+# Provera API Gateway
+docker logs projekat-2025-1-api-gateway-1 | Select-String "HTTPS|HTTP"
 ```
 
-#### 1.2 Prijava na sistem (OTP)
-```bash
-# 1. Zahtevaj OTP
-curl -X POST http://localhost:8080/api/users/login/request-otp \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "testuser"
-  }'
+**Očekivani rezultat:**
+- Users Service: `Starting HTTPS server on port 8001`
+- Content Service: `Starting HTTPS server on port 8002`
+- API Gateway: `Starting HTTP server on port 8080` (za eksterni pristup)
 
-# 2. Proveri email i dobij OTP kod
-# 3. Verifikuj OTP
-curl -X POST http://localhost:8080/api/users/login/verify-otp \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "testuser",
-    "otp": "123456"
-  }'
+### Test 2: Testiranje HTTPS komunikacije između servisa
 
-# Očekivani odgovor: JWT token
+```powershell
+# Test između API Gateway-a i Users Service-a
+docker exec projekat-2025-1-api-gateway-1 wget --no-check-certificate -O- https://users-service:8001/health
+
+# Test između API Gateway-a i Content Service-a
+docker exec projekat-2025-1-api-gateway-1 wget --no-check-certificate -O- https://content-service:8002/health
 ```
 
-#### 1.3 Kreiranje umetnika (Admin)
-```bash
-# Prvo prijavi se kao admin
-# Zatim kreiraj umetnika
-curl -X POST http://localhost:8080/api/content/artists \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -d '{
-    "name": "Test Artist",
-    "biography": "Test biography",
-    "genres": ["Pop", "Rock"]
-  }'
+**Očekivani rezultat:** Status 200 OK sa health check porukom.
+
+## 🌐 3. Testiranje API Gateway Endpoint-a
+
+### Test 1: Health Check Endpoint
+
+```powershell
+# API Gateway health (ako je registrovan)
+Invoke-WebRequest -Uri "http://localhost:8081/health" -UseBasicParsing
+
+# Users Service preko API Gateway-a
+Invoke-WebRequest -Uri "http://localhost:8081/api/users/health" -UseBasicParsing
+
+# Content Service preko API Gateway-a
+Invoke-WebRequest -Uri "http://localhost:8081/api/content/health" -UseBasicParsing
 ```
 
-#### 1.4 Kreiranje albuma i pesama
-```bash
-# Kreiraj album
-curl -X POST http://localhost:8080/api/content/albums \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -d '{
-    "name": "Test Album",
-    "releaseDate": "2024-01-01",
-    "genre": "Pop",
-    "artistIds": ["ARTIST_ID_FROM_PREVIOUS_STEP"]
-  }'
+**Očekivani rezultat:** Status 200 OK sa odgovarajućom porukom.
 
-# Kreiraj pesmu
-curl -X POST http://localhost:8080/api/content/songs \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -d '{
-    "name": "Test Song",
-    "duration": 180,
-    "genre": "Pop",
-    "albumId": "ALBUM_ID_FROM_PREVIOUS_STEP",
-    "artistIds": ["ARTIST_ID"],
-    "audioFileUrl": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
-  }'
+### Test 2: CORS Headers
+
+```powershell
+$response = Invoke-WebRequest -Uri "http://localhost:8081/api/users/health" -UseBasicParsing
+$response.Headers["Access-Control-Allow-Origin"]
 ```
 
-#### 1.5 Pregled sadržaja
-```bash
-# Lista svih umetnika
-curl http://localhost:8080/api/content/artists
+**Očekivani rezultat:** `*` ili origin frontend aplikacije.
 
-# Detalji umetnika
-curl http://localhost:8080/api/content/artists/{artistId}
+## 📧 4. Testiranje MailHog Funkcionalnosti
 
-# Lista svih albuma
-curl http://localhost:8080/api/content/albums
+### Test 1: Provera da li MailHog radi
 
-# Lista svih pesama
-curl http://localhost:8080/api/content/songs
+```powershell
+# Provera MailHog Web UI
+Start-Process "http://localhost:8025"
 
-# Detalji pesme
-curl http://localhost:8080/api/content/songs/{songId}
+# Provera SMTP porta
+Test-NetConnection -ComputerName localhost -Port 1025
 ```
 
-#### 1.11 Pregled notifikacija
-```bash
-curl http://localhost:8080/api/notifications \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+**Očekivani rezultat:** 
+- Web UI se otvara na `http://localhost:8025`
+- Port 1025 je otvoren
+
+### Test 2: Testiranje slanja email-a (OTP za admin login)
+
+1. **Otvorite frontend aplikaciju**: `http://localhost:3000`
+2. **Pokušajte da se ulogujete kao admin**:
+   - Email: `admin@musicstreaming.com`
+   - Kliknite na "Request OTP"
+3. **Proverite MailHog Web UI**: `http://localhost:8025`
+4. **Trebalo bi da vidite email sa OTP kodom**
+
+**Očekivani rezultat:** Email sa OTP kodom se pojavljuje u MailHog-u.
+
+### Test 3: Provera logova Users Service-a
+
+```powershell
+docker logs projekat-2025-1-users-service-1 | Select-String "EMAIL"
 ```
 
----
+**Očekivani rezultat:** 
+- `[EMAIL] SMTP configured: mailhog:1025`
+- `[EMAIL] Sent successfully via MailHog to admin@musicstreaming.com`
 
-### 🎵 Dodatno za Ocenu 7
+## 🔒 5. Testiranje Sigurnosnih Mehanizama
 
-#### 1.6 Reprodukcija pesme
-```bash
-# Test streaming endpoint-a
-curl -I http://localhost:8081/api/content/songs/{songId}/stream
+### Test 1: Password Hashing (Hash & Salt)
 
-# Frontend test:
-# 1. Otvori http://localhost:3000
-# 2. Idi na /songs/{songId}
-# 3. Proveri AudioPlayer komponentu
-# 4. Klikni play dugme
+```powershell
+# Registrujte novog korisnika preko API-ja
+$body = @{
+    email = "test@example.com"
+    password = "TestPassword123!"
+    firstName = "Test"
+    lastName = "User"
+} | ConvertTo-Json
+
+$response = Invoke-WebRequest -Uri "http://localhost:8081/api/users/register" `
+    -Method POST `
+    -Body $body `
+    -ContentType "application/json" `
+    -UseBasicParsing
+
+# Proverite MongoDB da vidite da li je password heširan
+docker exec projekat-2025-1-mongodb-users-1 mongosh --eval "db.users.findOne({email: 'test@example.com'}, {password: 1})"
 ```
 
-#### 1.7 Filtriranje i pretraga
-```bash
-# Pretraga pesama po nazivu
-curl "http://localhost:8080/api/content/songs?search=Test"
+**Očekivani rezultat:** 
+- Password je heširan (bcrypt hash, počinje sa `$2a$` ili `$2b$`)
+- Password NIJE u plain text formatu
 
-# Filtriranje umetnika po žanru
-curl "http://localhost:8080/api/content/artists?genre=Pop"
+### Test 2: POST Metoda za Senzitivne Podatke
+
+```powershell
+# Test login request (treba da koristi POST)
+$body = @{
+    email = "admin@musicstreaming.com"
+} | ConvertTo-Json
+
+$response = Invoke-WebRequest -Uri "http://localhost:8081/api/users/login/request-otp" `
+    -Method POST `
+    -Body $body `
+    -ContentType "application/json" `
+    -UseBasicParsing
+
+Write-Host "Status: $($response.StatusCode)"
 ```
 
-#### 1.8 Ocenjivanje pesama
-```bash
-# Oceni pesmu (sa sinhronom validacijom)
-curl -X POST "http://localhost:8083/rate-song?songId={songId}&rating=5&userId={userId}"
+**Očekivani rezultat:** 
+- Status 200 OK
+- Email je poslat (proverite MailHog)
 
-# Proveri da li radi sinhrona komunikacija:
-# - Ako pesme ne postoji: treba vratiti 404
-# - Ako content service nije dostupan: treba aktivirati fallback
+### Test 3: HTTPS za Inter-Service Komunikaciju
+
+```powershell
+# Provera da li API Gateway koristi HTTPS za komunikaciju sa backend servisima
+docker exec projekat-2025-1-api-gateway-1 cat /proc/self/environ | Select-String "USERS_SERVICE_URL|CONTENT_SERVICE_URL"
 ```
 
-#### 1.9 Pretplata na umetnike
-```bash
-# Pretplati se na umetnika (sa sinhronom validacijom)
-curl -X POST "http://localhost:8084/subscribe-artist?artistId={artistId}&userId={userId}"
+**Očekivani rezultat:** 
+- `USERS_SERVICE_URL=https://users-service:8001`
+- `CONTENT_SERVICE_URL=https://content-service:8002`
 
-# Proveri sinhronu komunikaciju:
-# - Ako umetnik ne postoji: treba vratiti 404
-# - Ako content service nije dostupan: treba aktivirati fallback
+## 🧪 6. Kompletan Test Scenarijo
+
+### Scenario: Registracija i Login Novog Korisnika
+
+```powershell
+# 1. Registracija
+$registerBody = @{
+    email = "newuser@test.com"
+    password = "SecurePass123!"
+    firstName = "New"
+    lastName = "User"
+} | ConvertTo-Json
+
+$registerResponse = Invoke-WebRequest -Uri "http://localhost:8081/api/users/register" `
+    -Method POST `
+    -Body $registerBody `
+    -ContentType "application/json" `
+    -UseBasicParsing
+
+Write-Host "Registration Status: $($registerResponse.StatusCode)"
+
+# 2. Request OTP
+$otpBody = @{
+    email = "newuser@test.com"
+} | ConvertTo-Json
+
+$otpResponse = Invoke-WebRequest -Uri "http://localhost:8081/api/users/login/request-otp" `
+    -Method POST `
+    -Body $otpBody `
+    -ContentType "application/json" `
+    -UseBasicParsing
+
+Write-Host "OTP Request Status: $($otpResponse.StatusCode)"
+
+# 3. Proverite MailHog za OTP kod
+Write-Host "`nProverite MailHog na http://localhost:8025 za OTP kod"
+
+# 4. Verify OTP (zamenite OTP_CODE sa stvarnim kodom)
+# $verifyBody = @{
+#     email = "newuser@test.com"
+#     otp = "OTP_CODE"
+# } | ConvertTo-Json
+# 
+# $verifyResponse = Invoke-WebRequest -Uri "http://localhost:8081/api/users/login/verify-otp" `
+#     -Method POST `
+#     -Body $verifyBody `
+#     -ContentType "application/json" `
+#     -UseBasicParsing
+# 
+# Write-Host "Login Status: $($verifyResponse.StatusCode)"
+# Write-Host "Token: $($verifyResponse.Content)"
 ```
 
----
+## 📊 7. Checklist za Testiranje
 
-## 🔧 Testiranje Otpornosti na Otkaze (2.7)
+- [ ] Svi Docker kontejneri su pokrenuti
+- [ ] API Gateway odgovara na `http://localhost:8081/api/users/health`
+- [ ] MailHog Web UI je dostupan na `http://localhost:8025`
+- [ ] HTTPS sertifikati postoje u `certs/` direktorijumu
+- [ ] Servisi koriste HTTPS za inter-service komunikaciju (proverite logove)
+- [ ] Password se čuva kao hash u MongoDB-u (ne plain text)
+- [ ] Senzitivni podaci se šalju preko POST metode
+- [ ] Email se šalje kada se traži OTP
+- [ ] CORS headers su postavljeni pravilno
+- [ ] Frontend može da komunicira sa API Gateway-em
 
-### 2.7.1 HTTP Client konfiguracija
-```bash
-# Proveri timeout - zaustavi content service
-docker-compose stop content-service
+## 🐛 Troubleshooting
 
-# Pokušaj ocenjivanje - treba pasti nakon 2 sekunde
-curl -X POST "http://localhost:8083/rate-song?songId=test&rating=5&userId=test"
-```
+### Problem: "404 page not found" na `/health`
+**Rešenje:** API Gateway možda nema root endpoint. Koristite `/api/users/health` umesto toga.
 
-### 2.7.2 Timeout testiranje
-```bash
-# Sledi logove - treba videti timeout poruke
-docker-compose logs ratings-service
-```
+### Problem: Email se ne šalje
+**Rešenje:** 
+1. Proverite da li je MailHog pokrenut: `docker ps | Select-String mailhog`
+2. Proverite logove Users Service-a: `docker logs projekat-2025-1-users-service-1 | Select-String EMAIL`
+3. Proverite environment varijable: `docker exec projekat-2025-1-users-service-1 env | Select-String SMTP`
 
-### 2.7.3 Fallback logika
-```bash
-# Sa content service down, proveri fallback poruke
-curl -X POST "http://localhost:8084/subscribe-artist?artistId=test&userId=test"
+### Problem: "unencrypted connection" greška
+**Rešenje:** MailHog ne koristi TLS. Proverite da li je `SMTP_HOST=mailhog` u docker-compose.yml.
 
-# Očekivano: "Content-service unavailable, fallback activated"
-```
+### Problem: HTTPS sertifikati nisu pronađeni
+**Rešenje:** 
+1. Generišite sertifikate: `.\generate-certs.ps1`
+2. Proverite da li postoje: `ls certs/`
 
-### 2.7.4 Circuit Breaker testiranje
-```bash
-# 1. Pokreni content service
-docker-compose start content-service
+## 📝 Napomene
 
-# 2. Napravi 3 neuspešna poziva redom (sa nevalidnim songId)
-for i in {1..3}; do
-  curl -X POST "http://localhost:8083/rate-song?songId=invalid&rating=5&userId=test"
-done
-
-# 3. Četvrti poziv treba da vrati "circuit breaker open"
-curl -X POST "http://localhost:8083/rate-song?songId=valid&rating=5&userId=test"
-
-# 4. Sačekaj 5+ sekundi i probaj opet - treba raditi
-sleep 6
-curl -X POST "http://localhost:8083/rate-song?songId=valid&rating=5&userId=test"
-```
-
----
-
-## 🌐 Frontend Testiranje
-
-### Pokretanje frontend-a
-```bash
-cd frontend
-npm start
-```
-
-### Test rute u browseru:
-- `http://localhost:3000` - Početna stranica
-- `http://localhost:3000/login` - Prijava
-- `http://localhost:3000/register` - Registracija
-- `http://localhost:3000/artists` - Lista umetnika
-- `http://localhost:3000/artists/{id}` - Detalji umetnika
-- `http://localhost:3000/albums` - Lista albuma
-- `http://localhost:3000/songs` - Lista pesama
-- `http://localhost:3000/songs/{id}` - Detalji pesme sa AudioPlayer
-- `http://localhost:3000/url-tester` - URL tester za audio fajlove
-
----
-
-## 📊 Provera Logova
-
-### Svi servisi
-```bash
-# Proveri logove svih servisa
-docker-compose logs -f
-
-# Specifični servis
-docker-compose logs -f content-service
-docker-compose logs -f ratings-service
-docker-compose logs -f subscriptions-service
-```
-
-### Traži ključne poruke:
-- "Circuit breaker opened"
-- "Retrying call to content-service"
-- "Content-service unavailable, fallback activated"
-- "Song rated successfully"
-- "Subscribed to artist successfully"
-
----
-
-## ✅ Checklist za Ocenu 7
-
-- [ ] Registracija radi (email verifikacija)
-- [ ] Prijava sa OTP radi
-- [ ] Kreiranje umetnika radi
-- [ ] Kreiranje albuma i pesama radi
-- [ ] Pregled sadržaja radi
-- [ ] Notifikacje se prikazuju
-- [ ] AudioPlayer reprodukuje pesme
-- [ ] Pretraga i filtriranje rade
-- [ ] Ocenjivanje pesama radi (sa validacijom)
-- [ ] Pretplata na umetnike radi (sa validacijom)
-- [ ] Timeout se primenjuje (2 sekunde)
-- [ ] Retry mehanizam radi (2 puta)
-- [ ] Fallback logika radi
-- [ ] Circuit breaker otvara/se zatvara
-- [ ] Frontend prikazuje sve funkcionalnosti
-
----
-
-## 🐛 Debug Tips
-
-### Ako nešto ne radi:
-1. Proveri da li su svi servisi pokrenuti: `docker-compose ps`
-2. Proveri logove: `docker-compose logs {service-name}`
-3. Proveri portove: `netstat -tulpn | grep :808`
-4. Očisti i restartuj: `docker-compose down && docker-compose up -d`
-
-### Najčešći problemi:
-- Port konflikti - promeni portove u docker-compose.yml
-- MongoDB ne startuje - proveri docker volume
-- Frontend ne može da se poveže - proveri API proxy u package.json
+- **Development Mode**: API Gateway koristi HTTP za eksterni pristup (između frontenda i API Gateway-a) radi lakšeg razvoja
+- **Production Mode**: Za produkciju, trebalo bi da koristite HTTPS i za eksterni pristup
+- **Self-Signed Certificates**: Sertifikati su self-signed i neće biti verifikovani od strane browsera. To je normalno za development.

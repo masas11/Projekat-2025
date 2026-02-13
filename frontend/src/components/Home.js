@@ -19,7 +19,14 @@ const Home = () => {
     setError(null);
     
     try {
-      const response = await fetch(`http://localhost:8003/recommendations?userId=${user.id}`);
+      // Koristi API Gateway endpoint umesto direktnog poziva na ratings-service
+      const token = localStorage.getItem('token');
+      const response = await fetch(`http://localhost:8081/api/ratings/recommendations?userId=${user.id}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
       if (!response.ok) {
         throw new Error('Failed to fetch recommendations');
       }

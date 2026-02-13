@@ -1,6 +1,7 @@
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://localhost:8081';
 
-// Za HTTPS development, postavite REACT_APP_API_URL=https://localhost:8081
+// HTTPS je omogućen za komunikaciju sa API Gateway-em
+// Za development sa self-signed sertifikatima, browser će tražiti potvrdu
 
 class ApiService {
   constructor() {

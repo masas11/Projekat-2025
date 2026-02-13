@@ -38,21 +38,21 @@ services:
       - MONGODB_DATABASE=users_db
       - TLS_CERT_FILE=/app/certs/server.crt
       - TLS_KEY_FILE=/app/certs/server.key
-      # SMTP Configuration (set these to enable real email sending)
-      # Option 1: Create .env file with your SMTP credentials (recommended)
-      # Option 2: Replace the default values below directly
-      # For Gmail: Create App Password at https://myaccount.google.com/apppasswords
-      - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
-      - SMTP_PORT=${SMTP_PORT:-587}
-      - SMTP_USERNAME=${SMTP_USERNAME:-your-email@gmail.com}
-      - SMTP_PASSWORD=${SMTP_PASSWORD:-your-app-password-here}
-      - SMTP_FROM=${SMTP_FROM:-your-email@gmail.com}
-      - FRONTEND_URL=${FRONTEND_URL:-https://localhost:3000}
+      # SMTP Configuration - Using MailHog for development
+      # MailHog web UI: http://localhost:8025
+      - SMTP_HOST=${SMTP_HOST:-mailhog}
+      - SMTP_PORT=${SMTP_PORT:-1025}
+      - SMTP_USERNAME=${SMTP_USERNAME:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - SMTP_FROM=${SMTP_FROM:-noreply@musicstreaming.com}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
     volumes:
       - ./certs:/app/certs:ro
     depends_on:
       mongodb-users:
         condition: service_healthy
+      mailhog:
+        condition: service_started
     networks:
       - music-streaming-network
 
@@ -246,6 +246,14 @@ services:
       - TLS_KEY_FILE=/app/certs/server.key
     volumes:
       - ./certs:/app/certs:ro
+    networks:
+      - music-streaming-network
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    ports:
+      - "1025:1025"  # SMTP port
+      - "8025:8025"  # Web UI port
     networks:
       - music-streaming-network
 

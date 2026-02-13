@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"crypto/tls"
+	"encoding/json"
 	"io"
 	"log"
 	"net/http"
@@ -150,6 +151,17 @@ func main() {
 	defer appLogger.Close()
 
 	mux := http.NewServeMux()
+
+	// Health endpoint
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		enableCORS(w, r)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]string{
+			"status": "healthy",
+			"service": "api-gateway",
+		})
+	})
 
 	// Global rate limiting: 100 requests per minute per IP (DoS protection)
 	globalRateLimit := middleware.RateLimit(100, 1*time.Minute)
@@ -489,6 +501,11 @@ func main() {
 		targetURL := cfg.RatingsServiceURL + "/recommendations?userId=" + userId
 		proxyRequest(w, r, targetURL, appLogger)
 	})))
+
+	// Note: Root endpoint "/" is intentionally not registered
+	// In Go ServeMux, "/" is a catch-all that would interfere with other routes
+	// Use /health endpoint instead for API Gateway status
+	// All API endpoints are under /api/*
 
 	log.Println("API Gateway running on port", cfg.Port)
 	

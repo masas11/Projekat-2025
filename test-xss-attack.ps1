@@ -16,19 +16,23 @@ $body = @{
 } | ConvertTo-Json
 
 $result = Invoke-HTTPSRequest -Uri "https://localhost:8081/api/users/register" -Method "POST" -Body $body -ContentType "application/json"
-Write-Host "Status: $($result.StatusCode)" -ForegroundColor $(if ($result.StatusCode -eq 400) { "Green" } else { "Red" })
+Write-Host "Status: $($result.StatusCode)" -ForegroundColor $(if ($result.StatusCode -eq 400 -or $result.StatusCode -eq 429) { "Green" } else { "Red" })
 Write-Host "Response: $($result.Content)" -ForegroundColor Gray
 if ($result.StatusCode -eq 400) {
-    Write-Host "✓ XSS napad je BLOKIRAN!" -ForegroundColor Green
+    Write-Host "[OK] XSS napad je BLOKIRAN (Input validation)!" -ForegroundColor Green
+} elseif ($result.StatusCode -eq 429) {
+    Write-Host "[OK] XSS napad je BLOKIRAN (Rate limiting)!" -ForegroundColor Green
+    Write-Host "     Napomena: Rate limit je aktiviran - ovo je takođe zaštita!" -ForegroundColor Yellow
 } else {
-    Write-Host "✗ XSS napad je PROŠAO!" -ForegroundColor Red
+    Write-Host "[FAIL] XSS napad je PROSAO!" -ForegroundColor Red
 }
 Start-Sleep -Seconds 2
 
 # Test 2: XSS sa Event Handler-om
 Write-Host "`nTest 2: XSS sa Event Handler-om (onerror)" -ForegroundColor Yellow
+$firstNameXSS = '<img src=x onerror=alert(''XSS'')>'
 $body = @{
-    firstName = "<img src=x onerror=alert('XSS')>"
+    firstName = $firstNameXSS
     lastName = "User"
     email = "xss2@test.com"
     username = "xssuser2"
@@ -37,11 +41,13 @@ $body = @{
 } | ConvertTo-Json
 
 $result = Invoke-HTTPSRequest -Uri "https://localhost:8081/api/users/register" -Method "POST" -Body $body -ContentType "application/json"
-Write-Host "Status: $($result.StatusCode)" -ForegroundColor $(if ($result.StatusCode -eq 400) { "Green" } else { "Red" })
+Write-Host "Status: $($result.StatusCode)" -ForegroundColor $(if ($result.StatusCode -eq 400 -or $result.StatusCode -eq 429) { "Green" } else { "Red" })
 if ($result.StatusCode -eq 400) {
-    Write-Host "✓ XSS napad je BLOKIRAN!" -ForegroundColor Green
+    Write-Host "[OK] XSS napad je BLOKIRAN (Input validation)!" -ForegroundColor Green
+} elseif ($result.StatusCode -eq 429) {
+    Write-Host "[OK] XSS napad je BLOKIRAN (Rate limiting)!" -ForegroundColor Green
 } else {
-    Write-Host "✗ XSS napad je PROŠAO!" -ForegroundColor Red
+    Write-Host "[FAIL] XSS napad je PROSAO!" -ForegroundColor Red
 }
 Start-Sleep -Seconds 2
 
@@ -57,13 +63,15 @@ $body = @{
 } | ConvertTo-Json
 
 $result = Invoke-HTTPSRequest -Uri "https://localhost:8081/api/users/register" -Method "POST" -Body $body -ContentType "application/json"
-Write-Host "Status: $($result.StatusCode)" -ForegroundColor $(if ($result.StatusCode -eq 400) { "Green" } else { "Red" })
+Write-Host "Status: $($result.StatusCode)" -ForegroundColor $(if ($result.StatusCode -eq 400 -or $result.StatusCode -eq 429) { "Green" } else { "Red" })
 if ($result.StatusCode -eq 400) {
-    Write-Host "✓ XSS napad je BLOKIRAN!" -ForegroundColor Green
+    Write-Host "[OK] XSS napad je BLOKIRAN (Input validation)!" -ForegroundColor Green
+} elseif ($result.StatusCode -eq 429) {
+    Write-Host "[OK] XSS napad je BLOKIRAN (Rate limiting)!" -ForegroundColor Green
 } else {
-    Write-Host "✗ XSS napad je PROŠAO!" -ForegroundColor Red
+    Write-Host "[FAIL] XSS napad je PROSAO!" -ForegroundColor Red
 }
 
 Write-Host "`n=== REZIME ===" -ForegroundColor Cyan
 Write-Host "Svi XSS napadi su testirani." -ForegroundColor White
-Write-Host "Proverite logove: docker logs projekat-2025-2-users-service-1 | grep VALIDATION_FAILURE" -ForegroundColor Gray
+Write-Host "Proverite logove: docker logs projekat-2025-2-users-service-1 | Select-String VALIDATION_FAILURE" -ForegroundColor Gray

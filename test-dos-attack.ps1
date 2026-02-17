@@ -53,12 +53,12 @@ $blockedPercentage = [math]::Round(($blockedCount / $totalRequests) * 100, 2)
 Write-Host "Procenat blokiranih: $blockedPercentage%" -ForegroundColor $(if ($blockedPercentage -gt 0) { "Green" } else { "Yellow" })
 
 if ($blockedCount -gt 0) {
-    Write-Host "`n✓ DoS NAPAD JE BLOKIRAN!" -ForegroundColor Green
-    Write-Host "  Rate limiting je zaštitio server od preopterećenja." -ForegroundColor White
+    Write-Host "`n[OK] DoS NAPAD JE BLOKIRAN!" -ForegroundColor Green
+    Write-Host "  Rate limiting je zastitio server od preopterecenja." -ForegroundColor White
     Write-Host "  $blockedCount zahteva je blokirano (HTTP 429)." -ForegroundColor White
 } else {
-    Write-Host "`n⚠ DoS NAPAD NIJE BLOKIRAN!" -ForegroundColor Yellow
-    Write-Host "  Rate limiting možda ne radi pravilno." -ForegroundColor White
+    Write-Host "`n[WARN] DoS NAPAD NIJE BLOKIRAN!" -ForegroundColor Yellow
+    Write-Host "  Rate limiting mozda ne radi pravilno." -ForegroundColor White
 }
 
-Write-Host "`nProverite logove: docker logs projekat-2025-2-api-gateway-1 | grep 'too many requests'" -ForegroundColor Gray
+Write-Host "`nProverite logove: docker logs projekat-2025-2-api-gateway-1 | Select-String 'too many requests'" -ForegroundColor Gray

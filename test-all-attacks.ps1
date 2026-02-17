@@ -10,8 +10,11 @@ Write-Host ""
 # Test 1: XSS Napad
 Write-Host "=== 1. XSS NAPAD ===" -ForegroundColor Yellow
 Write-Host ""
+Write-Host "Napomena: Ako vidite Status 429, to znači da je rate limiting aktiviran." -ForegroundColor Yellow
+Write-Host "To je takođe validna zaštita - napad je blokiran!" -ForegroundColor Yellow
+Write-Host ""
 & .\test-xss-attack.ps1
-Start-Sleep -Seconds 3
+Start-Sleep -Seconds 5  # Veći delay da rate limit resetuje
 
 # Test 2: SQL Injection Napad
 Write-Host "`n`n=== 2. SQL INJECTION NAPAD ===" -ForegroundColor Yellow

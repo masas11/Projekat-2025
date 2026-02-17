@@ -19,9 +19,9 @@ $result = Invoke-HTTPSRequest -Uri "https://localhost:8081/api/users/register" -
 Write-Host "Status: $($result.StatusCode)" -ForegroundColor $(if ($result.StatusCode -eq 400) { "Green" } else { "Red" })
 Write-Host "Response: $($result.Content)" -ForegroundColor Gray
 if ($result.StatusCode -eq 400) {
-    Write-Host "✓ SQL Injection napad je BLOKIRAN!" -ForegroundColor Green
+    Write-Host "[OK] SQL Injection napad je BLOKIRAN!" -ForegroundColor Green
 } else {
-    Write-Host "✗ SQL Injection napad je PROŠAO!" -ForegroundColor Red
+    Write-Host "[FAIL] SQL Injection napad je PROSAO!" -ForegroundColor Red
 }
 Start-Sleep -Seconds 2
 
@@ -39,16 +39,17 @@ $body = @{
 $result = Invoke-HTTPSRequest -Uri "https://localhost:8081/api/users/register" -Method "POST" -Body $body -ContentType "application/json"
 Write-Host "Status: $($result.StatusCode)" -ForegroundColor $(if ($result.StatusCode -eq 400) { "Green" } else { "Red" })
 if ($result.StatusCode -eq 400) {
-    Write-Host "✓ SQL Injection napad je BLOKIRAN!" -ForegroundColor Green
+    Write-Host "[OK] SQL Injection napad je BLOKIRAN!" -ForegroundColor Green
 } else {
-    Write-Host "✗ SQL Injection napad je PROŠAO!" -ForegroundColor Red
+    Write-Host "[FAIL] SQL Injection napad je PROSAO!" -ForegroundColor Red
 }
 Start-Sleep -Seconds 2
 
 # Test 3: SQL Injection sa DROP TABLE
 Write-Host "`nTest 3: SQL Injection sa DROP TABLE" -ForegroundColor Yellow
+$firstNameSQL = "Test'; DROP TABLE users--"
 $body = @{
-    firstName = "Test'; DROP TABLE users--"
+    firstName = $firstNameSQL
     lastName = "User"
     email = "sqli3@test.com"
     username = "sqliuser3"
@@ -59,11 +60,11 @@ $body = @{
 $result = Invoke-HTTPSRequest -Uri "https://localhost:8081/api/users/register" -Method "POST" -Body $body -ContentType "application/json"
 Write-Host "Status: $($result.StatusCode)" -ForegroundColor $(if ($result.StatusCode -eq 400) { "Green" } else { "Red" })
 if ($result.StatusCode -eq 400) {
-    Write-Host "✓ SQL Injection napad je BLOKIRAN!" -ForegroundColor Green
+    Write-Host "[OK] SQL Injection napad je BLOKIRAN!" -ForegroundColor Green
 } else {
-    Write-Host "✗ SQL Injection napad je PROŠAO!" -ForegroundColor Red
+    Write-Host "[FAIL] SQL Injection napad je PROSAO!" -ForegroundColor Red
 }
 
 Write-Host "`n=== REZIME ===" -ForegroundColor Cyan
 Write-Host "Svi SQL Injection napadi su testirani." -ForegroundColor White
-Write-Host "Proverite logove: docker logs projekat-2025-2-users-service-1 | grep VALIDATION_FAILURE" -ForegroundColor Gray
+Write-Host "Proverite logove: docker logs projekat-2025-2-users-service-1 | Select-String VALIDATION_FAILURE" -ForegroundColor Gray

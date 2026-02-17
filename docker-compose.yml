@@ -14,8 +14,10 @@ services:
       - RATINGS_SERVICE_URL=https://ratings-service:8003
       - TLS_CERT_FILE=/app/certs/server.crt
       - TLS_KEY_FILE=/app/certs/server.key
+      - LOG_DIR=/app/logs
     volumes:
       - ./certs:/app/certs:ro
+      - ./logs/api-gateway:/app/logs
     depends_on:
       - users-service
       - content-service
@@ -38,6 +40,7 @@ services:
       - MONGODB_DATABASE=users_db
       - TLS_CERT_FILE=/app/certs/server.crt
       - TLS_KEY_FILE=/app/certs/server.key
+      - LOG_DIR=/app/logs
       # SMTP Configuration - Using MailHog for development
       # MailHog web UI: http://localhost:8025
       - SMTP_HOST=${SMTP_HOST:-mailhog}
@@ -48,6 +51,7 @@ services:
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
     volumes:
       - ./certs:/app/certs:ro
+      - ./logs/users-service:/app/logs
     depends_on:
       mongodb-users:
         condition: service_healthy
@@ -85,8 +89,10 @@ services:
       - SUBSCRIPTIONS_SERVICE_URL=https://subscriptions-service:8004
       - TLS_CERT_FILE=/app/certs/server.crt
       - TLS_KEY_FILE=/app/certs/server.key
+      - LOG_DIR=/app/logs
     volumes:
       - ./certs:/app/certs:ro
+      - ./logs/content-service:/app/logs
     depends_on:
       mongodb-content:
         condition: service_healthy

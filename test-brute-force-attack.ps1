@@ -30,16 +30,16 @@ for ($i = 0; $i -lt $passwords.Count; $i++) {
     
     if ($result.StatusCode -eq 200) {
         $successCount++
-        Write-Host " → ✓ USPEH! Lozinka probijena: $password" -ForegroundColor Green
+        Write-Host " -> [SUCCESS] USPEH! Lozinka probijena: $password" -ForegroundColor Green
         break
     } elseif ($result.StatusCode -eq 403) {
         $locked = $true
-        Write-Host " → ✗ NALOG ZAKLJUČAN (Status: 403)" -ForegroundColor Red
-        Write-Host "   Account je zaključan nakon 5 neuspešnih pokušaja!" -ForegroundColor Yellow
+        Write-Host " -> [LOCKED] NALOG ZAKLJUCAN (Status: 403)" -ForegroundColor Red
+        Write-Host "   Account je zakljucan nakon 5 neuspesnih pokusaja!" -ForegroundColor Yellow
         break
     } else {
         $failureCount++
-        Write-Host " → ✗ Neuspešno (Status: $($result.StatusCode))" -ForegroundColor Red
+        Write-Host " -> [FAIL] Neuspesno (Status: $($result.StatusCode))" -ForegroundColor Red
     }
     
     Start-Sleep -Seconds 1
@@ -52,14 +52,14 @@ Write-Host "Neuspešno: $failureCount" -ForegroundColor White
 Write-Host "Nalog zaključan: $locked" -ForegroundColor $(if ($locked) { "Green" } else { "Yellow" })
 
 if ($locked) {
-    Write-Host "`n✓ BRUTE-FORCE NAPAD JE BLOKIRAN!" -ForegroundColor Green
-    Write-Host "  Account locking mehanizam je zaštitio nalog." -ForegroundColor White
+    Write-Host "`n[OK] BRUTE-FORCE NAPAD JE BLOKIRAN!" -ForegroundColor Green
+    Write-Host "  Account locking mehanizam je zastitio nalog." -ForegroundColor White
 } elseif ($successCount -eq 0) {
-    Write-Host "`n✓ BRUTE-FORCE NAPAD JE NEUSPEŠAN!" -ForegroundColor Green
+    Write-Host "`n[OK] BRUTE-FORCE NAPAD JE NEUSPESAN!" -ForegroundColor Green
     Write-Host "  Niti jedna lozinka nije probijena." -ForegroundColor White
 } else {
-    Write-Host "`n✗ BRUTE-FORCE NAPAD JE USPEŠAN!" -ForegroundColor Red
+    Write-Host "`n[FAIL] BRUTE-FORCE NAPAD JE USPESAN!" -ForegroundColor Red
     Write-Host "  Lozinka je probijena: $($passwords[$successCount-1])" -ForegroundColor Red
 }
 
-Write-Host "`nProverite logove: docker logs projekat-2025-2-users-service-1 | grep LOGIN_FAILURE" -ForegroundColor Gray
+Write-Host "`nProverite logove: docker logs projekat-2025-2-users-service-1 | Select-String LOGIN_FAILURE" -ForegroundColor Gray

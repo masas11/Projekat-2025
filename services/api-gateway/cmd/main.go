@@ -88,8 +88,8 @@ func proxyRequest(w http.ResponseWriter, r *http.Request, targetURL string, log 
 		// Log TLS/connection errors
 		if log != nil {
 			errorMsg := err.Error()
-			if strings.Contains(errorMsg, "tls") || strings.Contains(errorMsg, "TLS") || 
-			   strings.Contains(errorMsg, "certificate") || strings.Contains(errorMsg, "handshake") {
+			if strings.Contains(errorMsg, "tls") || strings.Contains(errorMsg, "TLS") ||
+				strings.Contains(errorMsg, "certificate") || strings.Contains(errorMsg, "handshake") {
 				serviceName := extractServiceName(targetURL)
 				log.LogTLSFailure(serviceName, errorMsg, r.RemoteAddr)
 			}
@@ -158,7 +158,7 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]string{
-			"status": "healthy",
+			"status":  "healthy",
 			"service": "api-gateway",
 		})
 	})
@@ -508,7 +508,7 @@ func main() {
 	// All API endpoints are under /api/*
 
 	log.Println("API Gateway running on port", cfg.Port)
-	
+
 	// Support HTTPS if certificates are provided
 	certFile := os.Getenv("TLS_CERT_FILE")
 	keyFile := os.Getenv("TLS_KEY_FILE")

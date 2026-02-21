@@ -3,12 +3,14 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
+	"sync"
 	"time"
 
 	"subscriptions-service/config"
@@ -16,21 +18,107 @@ import (
 	"subscriptions-service/internal/store"
 )
 
-// Check if artist exists by ID
-func checkArtistExists(client *http.Client, contentURL, artistID string) bool {
-	checkURL := contentURL + "/artists/" + url.QueryEscape(artistID)
+// Circuit Breaker implementation for resilience
+type CircuitBreaker struct {
+	mu           sync.RWMutex
+	maxFailures  int
+	failures     int
+	lastFailTime time.Time
+	state        string // "closed", "open", "half-open"
+	resetTimeout time.Duration
+}
 
-	for i := 0; i < 2; i++ { // retry 2 times
-		resp, err := client.Get(checkURL)
-		if err == nil && resp.StatusCode == http.StatusOK {
-			return true
+func NewCircuitBreaker(maxFailures int, resetTimeout time.Duration) *CircuitBreaker {
+	return &CircuitBreaker{
+		maxFailures:  maxFailures,
+		resetTimeout: resetTimeout,
+		state:        "closed",
+	}
+}
+
+func (cb *CircuitBreaker) Call(fn func() error) error {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+
+	// Check if circuit should reset
+	if cb.state == "open" {
+		timeSinceFail := time.Since(cb.lastFailTime)
+		if timeSinceFail > cb.resetTimeout {
+			cb.state = "half-open"
+			cb.failures = 0
+			log.Println("Circuit breaker transitioning to half-open")
+		} else {
+			return &CircuitBreakerError{"Circuit breaker is open"}
 		}
-		log.Printf("Retrying call to content-service for artist %s... (attempt %d)", artistID, i+1)
-		time.Sleep(100 * time.Millisecond)
 	}
 
-	log.Printf("Content-service unavailable for artist %s, fallback activated", artistID)
-	return false
+	err := fn()
+	if err != nil {
+		cb.failures++
+		cb.lastFailTime = time.Now()
+		if cb.failures >= cb.maxFailures {
+			cb.state = "open"
+			log.Printf("Circuit breaker opened after %d failures", cb.failures)
+		}
+		return err
+	}
+
+	// Success - reset failures
+	cb.failures = 0
+	if cb.state == "half-open" {
+		cb.state = "closed"
+		log.Println("Circuit breaker closed again")
+	}
+	return nil
+}
+
+type CircuitBreakerError struct {
+	Message string
+}
+
+func (e *CircuitBreakerError) Error() string {
+	return e.Message
+}
+
+// Check if artist exists by ID with circuit breaker and fallback
+func checkArtistExists(client *http.Client, contentURL, artistID string, cb *CircuitBreaker) bool {
+	checkURL := contentURL + "/artists/" + url.QueryEscape(artistID)
+
+	// Use circuit breaker for the call
+	var exists bool
+	var callErr error
+
+	err := cb.Call(func() error {
+		// Retry logic with timeout
+		for i := 0; i < 2; i++ { // retry 2 times
+			resp, err := client.Get(checkURL)
+			if err == nil {
+				resp.Body.Close()
+				if resp.StatusCode == http.StatusOK {
+					exists = true
+					return nil
+				}
+			}
+			if i < 1 { // Don't sleep on last attempt
+				log.Printf("Retrying call to content-service for artist %s... (attempt %d)", artistID, i+1)
+				time.Sleep(100 * time.Millisecond)
+			}
+		}
+		callErr = fmt.Errorf("failed to verify artist existence")
+		return callErr
+	})
+
+	if err != nil {
+		if _, ok := err.(*CircuitBreakerError); ok {
+			log.Printf("Circuit breaker open for artist %s, using fallback", artistID)
+		} else {
+			log.Printf("Error checking artist %s: %v, using fallback", artistID, err)
+		}
+		// Fallback logic: return false (artist not found) when service is unavailable
+		return false
+	}
+
+	return exists
 }
 
 func addCORSHeaders(w http.ResponseWriter) {
@@ -197,10 +285,19 @@ func main() {
 	// Initialize repository
 	subscriptionRepo := store.NewSubscriptionRepository(dbStore.Database)
 
-	// HTTP client with timeout
-	client := &http.Client{
-		Timeout: 2 * time.Second,
+	// HTTP client configuration with timeout (2.7.1, 2.7.2)
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		MaxIdleConns:    10,
+		IdleConnTimeout: 30 * time.Second,
 	}
+	client := &http.Client{
+		Timeout:   2 * time.Second, // Request timeout (2.7.2)
+		Transport: tr,
+	}
+
+	// Circuit breaker for content service calls (2.7.4)
+	contentServiceCB := NewCircuitBreaker(3, 5*time.Second) // Open after 3 failures, reset after 5 seconds
 
 	mux := http.NewServeMux()
 
@@ -282,8 +379,8 @@ func main() {
 				return
 			}
 
-			// Synchronous call to check if artist exists
-			exists := checkArtistExists(client, cfg.ContentServiceURL, artistID)
+			// Synchronous call to check if artist exists with circuit breaker (2.5, 2.7.4)
+			exists := checkArtistExists(client, cfg.ContentServiceURL, artistID, contentServiceCB)
 			if !exists {
 				w.WriteHeader(http.StatusNotFound)
 				w.Write([]byte("Artist not found"))

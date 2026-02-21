@@ -1,4 +1,4 @@
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://localhost:8081';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8081';
 
 // HTTPS je omogućen za komunikaciju sa API Gateway-em
 // Za development sa self-signed sertifikatima, browser će tražiti potvrdu
@@ -287,8 +287,8 @@ class ApiService {
     });
   }
 
-  async getRating(songId) {
-    return this.request(`/api/ratings/get-rating?songId=${songId}`);
+  async getRating(songId, userId) {
+    return this.request(`/api/ratings/get-rating?songId=${songId}&userId=${userId}`);
   }
 
   async deleteRating(songId, userId) {

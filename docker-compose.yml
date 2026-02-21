@@ -7,13 +7,14 @@ services:
       - "8081:8080"
     environment:
       - PORT=8080
-      - USERS_SERVICE_URL=https://users-service:8001
-      - CONTENT_SERVICE_URL=https://content-service:8002
-      - NOTIFICATIONS_SERVICE_URL=https://notifications-service:8005
-      - SUBSCRIPTIONS_SERVICE_URL=https://subscriptions-service:8004
-      - RATINGS_SERVICE_URL=https://ratings-service:8003
-      - TLS_CERT_FILE=/app/certs/server.crt
-      - TLS_KEY_FILE=/app/certs/server.key
+      - USERS_SERVICE_URL=http://users-service:8001
+      - CONTENT_SERVICE_URL=http://content-service:8002
+      - NOTIFICATIONS_SERVICE_URL=http://notifications-service:8005
+      - SUBSCRIPTIONS_SERVICE_URL=http://subscriptions-service:8004
+      - RATINGS_SERVICE_URL=http://ratings-service:8003
+      # TLS_CERT_FILE and TLS_KEY_FILE removed for development - API Gateway will use HTTP
+      # - TLS_CERT_FILE=/app/certs/server.crt
+      # - TLS_KEY_FILE=/app/certs/server.key
       - LOG_DIR=/app/logs
     volumes:
       - ./certs:/app/certs:ro
@@ -38,8 +39,9 @@ services:
       - JWT_SECRET=your-secret-key-change-in-production
       - MONGODB_URI=mongodb://mongodb-users:27017
       - MONGODB_DATABASE=users_db
-      - TLS_CERT_FILE=/app/certs/server.crt
-      - TLS_KEY_FILE=/app/certs/server.key
+      # TLS_CERT_FILE and TLS_KEY_FILE removed for development
+      # - TLS_CERT_FILE=/app/certs/server.crt
+      # - TLS_KEY_FILE=/app/certs/server.key
       - LOG_DIR=/app/logs
       # SMTP Configuration - Using MailHog for development
       # MailHog web UI: http://localhost:8025
@@ -86,9 +88,10 @@ services:
       - MONGODB_URI=mongodb://mongodb-content:27017
       - MONGODB_DATABASE=music_streaming
       - JWT_SECRET=your-secret-key-change-in-production
-      - SUBSCRIPTIONS_SERVICE_URL=https://subscriptions-service:8004
-      - TLS_CERT_FILE=/app/certs/server.crt
-      - TLS_KEY_FILE=/app/certs/server.key
+      - SUBSCRIPTIONS_SERVICE_URL=http://subscriptions-service:8004
+      # TLS_CERT_FILE and TLS_KEY_FILE removed for development
+      # - TLS_CERT_FILE=/app/certs/server.crt
+      # - TLS_KEY_FILE=/app/certs/server.key
       - LOG_DIR=/app/logs
     volumes:
       - ./certs:/app/certs:ro
@@ -137,11 +140,12 @@ services:
       - "8003:8003"
     environment:
       - PORT=8003
-      - CONTENT_SERVICE_URL=https://content-service:8002
+      - CONTENT_SERVICE_URL=http://content-service:8002
       - MONGODB_URI=mongodb://mongodb-ratings:27017
       - MONGODB_DATABASE=ratings_db
-      - TLS_CERT_FILE=/app/certs/server.crt
-      - TLS_KEY_FILE=/app/certs/server.key
+      # TLS_CERT_FILE and TLS_KEY_FILE removed for development
+      # - TLS_CERT_FILE=/app/certs/server.crt
+      # - TLS_KEY_FILE=/app/certs/server.key
     volumes:
       - ./certs:/app/certs:ro
     depends_on:
@@ -175,12 +179,13 @@ services:
       - "8004:8004"
     environment:
       - PORT=8004
-      - CONTENT_SERVICE_URL=https://content-service:8002
+      - CONTENT_SERVICE_URL=http://content-service:8002
       - MONGODB_URI=mongodb://mongodb-subscriptions:27017
       - MONGODB_DATABASE=subscriptions_db
-      - NOTIFICATIONS_SERVICE_URL=https://notifications-service:8005
-      - TLS_CERT_FILE=/app/certs/server.crt
-      - TLS_KEY_FILE=/app/certs/server.key
+      - NOTIFICATIONS_SERVICE_URL=http://notifications-service:8005
+      # TLS_CERT_FILE and TLS_KEY_FILE removed for development
+      # - TLS_CERT_FILE=/app/certs/server.crt
+      # - TLS_KEY_FILE=/app/certs/server.key
     volumes:
       - ./certs:/app/certs:ro
     depends_on:
@@ -203,8 +208,9 @@ services:
       - PORT=8005
       - CASSANDRA_HOSTS=cassandra:9042
       - CASSANDRA_KEYSPACE=notifications_keyspace
-      - TLS_CERT_FILE=/app/certs/server.crt
-      - TLS_KEY_FILE=/app/certs/server.key
+      # TLS_CERT_FILE and TLS_KEY_FILE removed for development
+      # - TLS_CERT_FILE=/app/certs/server.crt
+      # - TLS_KEY_FILE=/app/certs/server.key
     volumes:
       - ./certs:/app/certs:ro
     depends_on:
@@ -233,8 +239,9 @@ services:
       - "8006:8006"
     environment:
       - PORT=8006
-      - TLS_CERT_FILE=/app/certs/server.crt
-      - TLS_KEY_FILE=/app/certs/server.key
+      # TLS_CERT_FILE and TLS_KEY_FILE removed for development
+      # - TLS_CERT_FILE=/app/certs/server.crt
+      # - TLS_KEY_FILE=/app/certs/server.key
     volumes:
       - ./certs:/app/certs:ro
     networks:
@@ -248,8 +255,9 @@ services:
       - "8007:8007"
     environment:
       - PORT=8007
-      - TLS_CERT_FILE=/app/certs/server.crt
-      - TLS_KEY_FILE=/app/certs/server.key
+      # TLS_CERT_FILE and TLS_KEY_FILE removed for development
+      # - TLS_CERT_FILE=/app/certs/server.crt
+      # - TLS_KEY_FILE=/app/certs/server.key
     volumes:
       - ./certs:/app/certs:ro
     networks:

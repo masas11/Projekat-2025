@@ -13,7 +13,6 @@ const Register = () => {
   });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [verificationLink, setVerificationLink] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
@@ -54,18 +53,21 @@ const Register = () => {
     }
 
     setLoading(true);
-    setVerificationLink('');
 
     try {
-      const response = await api.register(formData);
+      await api.register(formData);
       
-      // Check if verification link is in response (when SMTP is not configured)
-      if (response.verificationLink) {
-        setVerificationLink(response.verificationLink);
-        setSuccess('Uspešna registracija! SMTP nije konfigurisan, koristite link ispod za verifikaciju:');
-      } else {
-        setSuccess('Uspešna registracija! Email za verifikaciju je poslat. Proverite svoj email i kliknite na link za verifikaciju.');
-      }
+      // Success - show message and redirect to login
+      setSuccess('Uspešna registracija! Email za verifikaciju je poslat. Proverite MailHog (http://localhost:8025) i kliknite na link za verifikaciju.');
+      
+      // Redirect to login after 3 seconds
+      setTimeout(() => {
+        navigate('/login', { 
+          state: { 
+            message: 'Registracija uspešna! Proverite MailHog (http://localhost:8025) za verifikacioni email.' 
+          } 
+        });
+      }, 3000);
     } catch (err) {
       // Better error handling for 409 Conflict (user already exists)
       if (err.message && (err.message.includes('409') || err.message.includes('already exists') || err.message.includes('user already exists'))) {
@@ -79,9 +81,50 @@ const Register = () => {
   };
 
   return (
-    <div className="container">
-      <div className="card">
-        <h2>Registruj se</h2>
+    <div style={{ 
+      minHeight: 'calc(100vh - 80px)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '40px 20px',
+      background: 'linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%)'
+    }}>
+      <div className="card" style={{ 
+        maxWidth: '520px', 
+        width: '100%',
+        background: 'linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.9) 100%)',
+        backdropFilter: 'blur(10px)',
+        boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
+        border: '1px solid rgba(255,255,255,0.3)'
+      }}>
+        <div style={{ textAlign: 'center', marginBottom: '40px' }}>
+          <div style={{
+            width: '80px',
+            height: '80px',
+            borderRadius: '20px',
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '40px',
+            margin: '0 auto 20px',
+            boxShadow: '0 8px 20px rgba(102, 126, 234, 0.3)'
+          }}>
+            ✨
+          </div>
+          <h2 style={{ 
+            fontSize: '32px', 
+            fontWeight: '700',
+            marginBottom: '8px',
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            backgroundClip: 'text'
+          }}>
+            Registruj se
+          </h2>
+          <p style={{ color: '#666', fontSize: '14px' }}>Kreirajte svoj nalog i počnite slušati</p>
+        </div>
         <form onSubmit={handleSubmit}>
           <div className="form-group">
             <label>Ime:</label>
@@ -132,7 +175,7 @@ const Register = () => {
               onChange={handleChange}
               required
             />
-            <small style={{ color: '#666', fontSize: '12px' }}>
+            <small style={{ color: '#666', fontSize: '12px', display: 'block', marginTop: '5px' }}>
               Lozinka mora imati najmanje 8 karaktera, jedno veliko slovo i jedan broj
             </small>
           </div>
@@ -146,52 +189,46 @@ const Register = () => {
               required
             />
           </div>
-          {error && <div className="error">{error}</div>}
+          {error && (
+            <div className="error">
+              <span>⚠️</span>
+              <span>{error}</span>
+            </div>
+          )}
           {success && (
             <div className="success">
-              <p>{success}</p>
-              {verificationLink && (
-                <div style={{ marginTop: '15px', padding: '15px', backgroundColor: '#f0f0f0', borderRadius: '5px' }}>
-                  <p style={{ marginBottom: '10px', fontWeight: 'bold' }}>Verifikacioni link:</p>
+              <span>✅</span>
+              <div>
+                <p style={{ marginBottom: '10px', fontWeight: '500' }}>{success}</p>
+                <p style={{ fontSize: '13px', color: '#666', marginTop: '8px' }}>
+                  Preusmeravanje na stranicu za prijavu za 3 sekunde...
+                </p>
+                <div style={{ marginTop: '15px', padding: '12px', backgroundColor: '#e3f2fd', borderRadius: '8px', border: '1px solid #90caf9' }}>
+                  <p style={{ fontSize: '13px', marginBottom: '8px', fontWeight: '500' }}>📧 MailHog Web UI:</p>
                   <a 
-                    href={verificationLink} 
+                    href="http://localhost:8025" 
                     target="_blank" 
                     rel="noopener noreferrer"
                     style={{ 
-                      color: '#FF9800', 
-                      wordBreak: 'break-all',
+                      color: '#1976d2', 
                       textDecoration: 'underline',
-                      display: 'block',
-                      marginBottom: '10px'
+                      fontSize: '14px',
+                      fontWeight: '500'
                     }}
                   >
-                    {verificationLink}
+                    http://localhost:8025
                   </a>
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(verificationLink);
-                      alert('Link je kopiran u clipboard!');
-                    }}
-                    style={{
-                      padding: '8px 15px',
-                      backgroundColor: '#FF9800',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      fontSize: '14px'
-                    }}
-                  >
-                    Kopiraj link
-                  </button>
                 </div>
-              )}
+              </div>
             </div>
           )}
-          <button type="submit" className="btn btn-primary" disabled={loading}>
+          <button type="submit" className="btn btn-primary" disabled={loading} style={{ width: '100%', marginTop: '10px' }}>
             {loading ? 'Registracija...' : 'Registruj se'}
           </button>
         </form>
+        <div style={{ marginTop: '20px', textAlign: 'center', fontSize: '14px', color: '#666' }}>
+          Već imate nalog? <a href="/login" style={{ color: '#667eea', textDecoration: 'none', fontWeight: '500' }}>Prijavite se</a>
+        </div>
       </div>
     </div>
   );

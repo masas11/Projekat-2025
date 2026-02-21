@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -93,24 +94,40 @@ func checkSongExists(client *http.Client, contentURL string) bool {
 	return true
 }
 
-// Check if specific song exists by ID
+// Check if specific song exists by ID with retry and fallback (2.7.2, 2.7.3)
 func checkSpecificSongExists(client *http.Client, contentURL, songID string) bool {
 	checkURL := contentURL + "/songs/exists?id=" + url.QueryEscape(songID)
 
+	// Retry logic with timeout (2.7.2)
 	for i := 0; i < 2; i++ { // retry 2 times
-		resp, err := client.Get(checkURL)
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		req, err := http.NewRequestWithContext(ctx, "GET", checkURL, nil)
+		if err != nil {
+			cancel()
+			log.Printf("Error creating request for song %s: %v", songID, err)
+			continue
+		}
+
+		resp, err := client.Do(req)
+		cancel()
+
 		if err == nil && resp.StatusCode == http.StatusOK {
 			var result map[string]bool
 			if err := json.NewDecoder(resp.Body).Decode(&result); err == nil {
+				resp.Body.Close()
 				return result["exists"]
 			}
+			resp.Body.Close()
 		}
-		log.Printf("Retrying call to content-service for song %s... (attempt %d)", songID, i+1)
-		time.Sleep(100 * time.Millisecond) // brief delay between retries
+		
+		if i < 1 { // Don't sleep on last attempt
+			log.Printf("Retrying call to content-service for song %s... (attempt %d)", songID, i+1)
+			time.Sleep(100 * time.Millisecond) // brief delay between retries
+		}
 	}
 
-	// fallback logic
-	log.Printf("Content-service unavailable for song %s, fallback activated", songID)
+	// Fallback logic (2.7.3): return false when service is unavailable
+	log.Printf("Content-service unavailable for song %s, fallback activated - assuming song does not exist", songID)
 	return false
 }
 
@@ -167,9 +184,15 @@ func main() {
 
 	log.Printf("Connected to MongoDB at %s, database: %s", mongoURI, mongoDBName)
 
-	// HTTP client with timeout (MANDATORY for 3.3)
+	// HTTP client configuration with timeout (2.7.1, 2.7.2)
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		MaxIdleConns:    10,
+		IdleConnTimeout: 30 * time.Second,
+	}
 	clientHTTP := &http.Client{
-		Timeout: 2 * time.Second,
+		Timeout:   2 * time.Second, // Request timeout (2.7.2)
+		Transport: tr,
 	}
 
 	// Circuit breaker for content service calls

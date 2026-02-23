@@ -167,11 +167,13 @@ func (s *Neo4jStore) GetSubscribedGenreSongs(ctx context.Context, userID string)
 	query := `
 		MATCH (u:User {id: $userID})-[:SUBSCRIBED_TO]->(g:Genre)<-[:BELONGS_TO]-(s:Song)
 		OPTIONAL MATCH (u)-[r:RATED]->(s)
-		WHERE r IS NULL OR r.rating >= 4
+		WITH s, g, r, CASE WHEN r IS NULL THEN true ELSE r.rating >= 4 END AS shouldInclude
+		WHERE shouldInclude = true
 		OPTIONAL MATCH (s)-[:PERFORMED_BY]->(a:Artist)
 		WITH DISTINCT s, g, collect(a.id) AS artistIds
 		RETURN s.id AS songId, s.name AS name, g.name AS genre, 
 		       s.albumId AS albumId, s.duration AS duration, artistIds
+		ORDER BY rand()
 		LIMIT 50
 	`
 

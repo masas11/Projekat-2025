@@ -17,6 +17,9 @@ const (
 	EventTypeNewArtist EventType = "new_artist"
 	EventTypeNewAlbum  EventType = "new_album"
 	EventTypeNewSong   EventType = "new_song"
+	EventTypeDeletedArtist EventType = "artist_deleted"
+	EventTypeDeletedAlbum  EventType = "album_deleted"
+	EventTypeDeletedSong   EventType = "song_deleted"
 )
 
 // Event payloads
@@ -44,6 +47,22 @@ type NewSongEvent struct {
 	ArtistIDs   []string  `json:"artistIds"`
 	ArtistNames []string  `json:"artistNames"` // Added for better notification messages
 	AlbumID     string    `json:"albumId"`
+}
+
+// Deletion event payloads
+type DeletedSongEvent struct {
+	Type   EventType `json:"type"`
+	SongID string    `json:"songId"`
+}
+
+type DeletedAlbumEvent struct {
+	Type    EventType `json:"type"`
+	AlbumID string    `json:"albumId"`
+}
+
+type DeletedArtistEvent struct {
+	Type     EventType `json:"type"`
+	ArtistID string   `json:"artistId"`
 }
 
 // EmitEvent sends an event to subscriptions-service asynchronously

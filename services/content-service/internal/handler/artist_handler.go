@@ -252,7 +252,7 @@ func (h *ArtistHandler) DeleteArtist(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get artist before deletion for logging
+	// Get artist before deletion for logging and events
 	artist, _ := h.Repo.GetByID(r.Context(), id)
 
 	if err := h.Repo.Delete(r.Context(), id); err != nil {
@@ -262,6 +262,14 @@ func (h *ArtistHandler) DeleteArtist(w http.ResponseWriter, r *http.Request) {
 		}
 		http.Error(w, "failed to delete artist: "+err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	// Emit deletion event to recommendation-service (asynchronous)
+	if artist != nil {
+		events.EmitEvent(h.RecommendationServiceURL, events.DeletedArtistEvent{
+			Type:     events.EventTypeDeletedArtist,
+			ArtistID: id,
+		})
 	}
 
 	// Log admin activity

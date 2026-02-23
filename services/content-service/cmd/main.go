@@ -45,7 +45,7 @@ func main() {
 
 	// Initialize handlers
 	artistHandler := handler.NewArtistHandler(artistRepo, cfg.SubscriptionsServiceURL, cfg.RecommendationServiceURL, appLogger)
-	albumHandler := handler.NewAlbumHandler(albumRepo, artistRepo, cfg.SubscriptionsServiceURL, appLogger)
+	albumHandler := handler.NewAlbumHandler(albumRepo, artistRepo, cfg.SubscriptionsServiceURL, cfg.RecommendationServiceURL, appLogger)
 	songHandler := handler.NewSongHandler(songRepo, albumRepo, artistRepo, cfg.SubscriptionsServiceURL, cfg.RecommendationServiceURL, appLogger)
 
 	mux := http.NewServeMux()

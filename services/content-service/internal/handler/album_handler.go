@@ -23,18 +23,20 @@ func extractAlbumID(path string) string {
 }
 
 type AlbumHandler struct {
-	Repo                    *store.AlbumRepository
-	ArtistRepo              *store.ArtistRepository
-	SubscriptionsServiceURL string
-	Logger                  *logger.Logger
+	Repo                     *store.AlbumRepository
+	ArtistRepo               *store.ArtistRepository
+	SubscriptionsServiceURL  string
+	RecommendationServiceURL string
+	Logger                   *logger.Logger
 }
 
-func NewAlbumHandler(repo *store.AlbumRepository, artistRepo *store.ArtistRepository, subscriptionsServiceURL string, log *logger.Logger) *AlbumHandler {
+func NewAlbumHandler(repo *store.AlbumRepository, artistRepo *store.ArtistRepository, subscriptionsServiceURL, recommendationServiceURL string, log *logger.Logger) *AlbumHandler {
 	return &AlbumHandler{
-		Repo:                    repo,
-		ArtistRepo:              artistRepo,
-		SubscriptionsServiceURL: subscriptionsServiceURL,
-		Logger:                  log,
+		Repo:                     repo,
+		ArtistRepo:               artistRepo,
+		SubscriptionsServiceURL:  subscriptionsServiceURL,
+		RecommendationServiceURL: recommendationServiceURL,
+		Logger:                   log,
 	}
 }
 
@@ -285,7 +287,7 @@ func (h *AlbumHandler) DeleteAlbum(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get album before deletion for logging
+	// Get album before deletion for logging and events
 	album, _ := h.Repo.GetByID(r.Context(), id)
 
 	if err := h.Repo.Delete(r.Context(), id); err != nil {
@@ -295,6 +297,14 @@ func (h *AlbumHandler) DeleteAlbum(w http.ResponseWriter, r *http.Request) {
 		}
 		http.Error(w, "failed to delete album: "+err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	// Emit deletion event to recommendation-service (asynchronous)
+	if album != nil {
+		events.EmitEvent(h.RecommendationServiceURL, events.DeletedAlbumEvent{
+			Type:    events.EventTypeDeletedAlbum,
+			AlbumID: id,
+		})
 	}
 
 	// Log admin activity

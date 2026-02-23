@@ -339,7 +339,7 @@ func (h *SongHandler) DeleteSong(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get song before deletion for logging
+	// Get song before deletion for logging and events
 	song, _ := h.Repo.GetByID(r.Context(), id)
 
 	if err := h.Repo.Delete(r.Context(), id); err != nil {
@@ -349,6 +349,14 @@ func (h *SongHandler) DeleteSong(w http.ResponseWriter, r *http.Request) {
 		}
 		http.Error(w, "failed to delete song: "+err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	// Emit deletion event to recommendation-service (asynchronous)
+	if song != nil {
+		events.EmitEvent(h.RecommendationServiceURL, events.DeletedSongEvent{
+			Type:   events.EventTypeDeletedSong,
+			SongID: id,
+		})
 	}
 
 	// Log admin activity

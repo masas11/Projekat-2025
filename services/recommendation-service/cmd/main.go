@@ -214,14 +214,22 @@ func main() {
 			switch eventType {
 			case "rating_created", "rating_updated":
 				handleRatingEvent(eventCtx, event, neo4jStore)
+			case "rating_deleted":
+				handleRatingDeleted(eventCtx, event, neo4jStore)
 			case "subscription_created":
 				handleSubscriptionCreated(eventCtx, event, neo4jStore)
 			case "subscription_deleted":
 				handleSubscriptionDeleted(eventCtx, event, neo4jStore)
 			case "song_created":
 				handleSongCreated(eventCtx, event, neo4jStore)
+			case "song_deleted":
+				handleSongDeleted(eventCtx, event, neo4jStore)
 			case "artist_created":
 				handleArtistCreated(eventCtx, event, neo4jStore)
+			case "artist_deleted":
+				handleArtistDeleted(eventCtx, event, neo4jStore)
+			case "album_deleted":
+				handleAlbumDeleted(eventCtx, event, neo4jStore)
 			default:
 				log.Printf("Unknown event type: %s", eventType)
 			}
@@ -382,4 +390,69 @@ func handleArtistCreated(ctx context.Context, event map[string]interface{}, stor
 	}
 
 	log.Printf("Artist created: %s", artistName)
+}
+
+func handleSongDeleted(ctx context.Context, event map[string]interface{}, store *store.Neo4jStore) {
+	songID, _ := event["songId"].(string)
+
+	if songID == "" {
+		log.Printf("Invalid song_deleted event: missing songId")
+		return
+	}
+
+	if err := store.DeleteSong(ctx, songID); err != nil {
+		log.Printf("Error deleting song: %v", err)
+		return
+	}
+
+	log.Printf("Song deleted: %s", songID)
+}
+
+func handleArtistDeleted(ctx context.Context, event map[string]interface{}, store *store.Neo4jStore) {
+	artistID, _ := event["artistId"].(string)
+
+	if artistID == "" {
+		log.Printf("Invalid artist_deleted event: missing artistId")
+		return
+	}
+
+	if err := store.DeleteArtist(ctx, artistID); err != nil {
+		log.Printf("Error deleting artist: %v", err)
+		return
+	}
+
+	log.Printf("Artist deleted: %s", artistID)
+}
+
+func handleAlbumDeleted(ctx context.Context, event map[string]interface{}, store *store.Neo4jStore) {
+	albumID, _ := event["albumId"].(string)
+
+	if albumID == "" {
+		log.Printf("Invalid album_deleted event: missing albumId")
+		return
+	}
+
+	if err := store.DeleteAlbum(ctx, albumID); err != nil {
+		log.Printf("Error deleting album: %v", err)
+		return
+	}
+
+	log.Printf("Album deleted: %s", albumID)
+}
+
+func handleRatingDeleted(ctx context.Context, event map[string]interface{}, store *store.Neo4jStore) {
+	userID, _ := event["userId"].(string)
+	songID, _ := event["songId"].(string)
+
+	if userID == "" || songID == "" {
+		log.Printf("Invalid rating_deleted event: missing userId or songId")
+		return
+	}
+
+	if err := store.DeleteRating(ctx, userID, songID); err != nil {
+		log.Printf("Error deleting rating: %v", err)
+		return
+	}
+
+	log.Printf("Rating deleted: user %s, song %s", userID, songID)
 }

@@ -330,6 +330,39 @@ func (s *Neo4jStore) DeleteSong(ctx context.Context, songID string) error {
 	return err
 }
 
+// DeleteArtist removes an artist and all its relationships
+func (s *Neo4jStore) DeleteArtist(ctx context.Context, artistID string) error {
+	session := s.driver.NewSession(ctx, neo4j.SessionConfig{})
+	defer session.Close(ctx)
+
+	query := `
+		MATCH (a:Artist {id: $artistID})
+		DETACH DELETE a
+	`
+
+	_, err := session.Run(ctx, query, map[string]interface{}{
+		"artistID": artistID,
+	})
+	return err
+}
+
+// DeleteAlbum removes an album (note: albums are not stored as nodes, but we can clean up related songs if needed)
+func (s *Neo4jStore) DeleteAlbum(ctx context.Context, albumID string) error {
+	// Albums are not stored as nodes in Neo4j, but we can delete all songs from that album
+	session := s.driver.NewSession(ctx, neo4j.SessionConfig{})
+	defer session.Close(ctx)
+
+	query := `
+		MATCH (s:Song {albumId: $albumID})
+		DETACH DELETE s
+	`
+
+	_, err := session.Run(ctx, query, map[string]interface{}{
+		"albumID": albumID,
+	})
+	return err
+}
+
 // DeleteRating removes a RATED relationship
 func (s *Neo4jStore) DeleteRating(ctx context.Context, userID, songID string) error {
 	session := s.driver.NewSession(ctx, neo4j.SessionConfig{})

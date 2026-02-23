@@ -79,8 +79,15 @@ func proxyRequest(w http.ResponseWriter, r *http.Request, targetURL string, log 
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
+	
+	// Povećan timeout za notifications-service zbog Cassandra inicijalizacije
+	timeout := 5 * time.Second
+	if strings.Contains(targetURL, "notifications-service") {
+		timeout = 15 * time.Second
+	}
+	
 	client := &http.Client{
-		Timeout:   5 * time.Second, // Timeout za pozive backend servisa
+		Timeout:   timeout,
 		Transport: tr,
 	}
 	resp, err := client.Do(req)

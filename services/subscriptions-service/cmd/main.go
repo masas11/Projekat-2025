@@ -142,31 +142,58 @@ func createNotification(notificationsServiceURL, userID, notifType, message, con
 		return
 	}
 
-	req, err := http.NewRequest("POST", notificationsServiceURL+"/notifications", bytes.NewBuffer(jsonData))
-	if err != nil {
-		log.Printf("Failed to create notification request: %v", err)
-		return
+	// Configure TLS transport for HTTPS support
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		MaxIdleConns:    10,
+		IdleConnTimeout: 30 * time.Second,
 	}
-
-	req.Header.Set("Content-Type", "application/json")
-
 	client := &http.Client{
-		Timeout: 2 * time.Second,
+		Timeout:   5 * time.Second, // Increased timeout from 2 to 5 seconds
+		Transport: tr,
 	}
 
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Printf("Failed to create notification: %v", err)
+	// Retry mechanism: try up to 3 times
+	maxRetries := 3
+	retryDelay := 500 * time.Millisecond
+	
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		req, err := http.NewRequest("POST", notificationsServiceURL+"/notifications", bytes.NewBuffer(jsonData))
+		if err != nil {
+			log.Printf("Failed to create notification request: %v", err)
+			return
+		}
+
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := client.Do(req)
+		if err != nil {
+			if attempt < maxRetries {
+				log.Printf("Failed to create notification (attempt %d/%d): %v, retrying...", attempt, maxRetries, err)
+				time.Sleep(retryDelay)
+				retryDelay *= 2 // Exponential backoff
+				continue
+			}
+			log.Printf("Failed to create notification after %d attempts: %v", maxRetries, err)
+			return
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode == http.StatusCreated || resp.StatusCode == http.StatusOK {
+			log.Printf("Notification created for user %s: %s", userID, message)
+			return
+		}
+
+		if attempt < maxRetries {
+			log.Printf("Notifications-service returned non-OK status: %d (attempt %d/%d), retrying...", resp.StatusCode, attempt, maxRetries)
+			time.Sleep(retryDelay)
+			retryDelay *= 2
+			continue
+		}
+
+		log.Printf("Notifications-service returned non-OK status after %d attempts: %d", maxRetries, resp.StatusCode)
 		return
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
-		log.Printf("Notifications-service returned non-OK status: %d", resp.StatusCode)
-		return
-	}
-
-	log.Printf("Notification created for user %s: %s", userID, message)
 }
 
 // handleNewArtistEvent processes new artist events
@@ -209,12 +236,37 @@ func handleNewArtistEvent(ctx context.Context, event map[string]interface{}, rep
 func handleNewAlbumEvent(ctx context.Context, event map[string]interface{}, repo *store.SubscriptionRepository, cfg *config.Config) {
 	albumID, _ := event["albumId"].(string)
 	albumName, _ := event["name"].(string)
+	genre, _ := event["genre"].(string)
 	artistIDs, _ := event["artistIds"].([]interface{})
+	artistNamesInterface, _ := event["artistNames"].([]interface{})
 
 	if albumID == "" {
 		log.Printf("Invalid new_album event: missing albumId")
 		return
 	}
+
+	// Convert artist names to string slice
+	artistNames := make([]string, 0, len(artistNamesInterface))
+	for _, nameInterface := range artistNamesInterface {
+		if name, ok := nameInterface.(string); ok {
+			artistNames = append(artistNames, name)
+		}
+	}
+
+	// Format artist names for message
+	artistNamesStr := "artist"
+	if len(artistNames) > 0 {
+		if len(artistNames) == 1 {
+			artistNamesStr = artistNames[0]
+		} else if len(artistNames) == 2 {
+			artistNamesStr = artistNames[0] + " and " + artistNames[1]
+		} else {
+			artistNamesStr = artistNames[0] + " and others"
+		}
+	}
+
+	// Track notified users to avoid duplicate notifications
+	notifiedUsers := make(map[string]bool)
 
 	// For each artist, find subscribers and notify them
 	for _, artistIDInterface := range artistIDs {
@@ -230,9 +282,36 @@ func handleNewAlbumEvent(ctx context.Context, event map[string]interface{}, repo
 		}
 
 		for _, sub := range subscriptions {
-			message := fmt.Sprintf("New album '%s' by artist has been released", albumName)
-			createNotification(cfg.NotificationsServiceURL, sub.UserID, "new_album", message, albumID)
+			if !notifiedUsers[sub.UserID] {
+				message := fmt.Sprintf("New album '%s' by %s has been released", albumName, artistNamesStr)
+				createNotification(cfg.NotificationsServiceURL, sub.UserID, "new_album", message, albumID)
+				notifiedUsers[sub.UserID] = true
+			}
 		}
+	}
+
+	// Also notify users subscribed to the genre (if genre is provided)
+	if genre != "" {
+		log.Printf("[GENRE] Checking genre subscriptions for album genre: '%s'", genre)
+		genreSubscriptions, err := repo.GetByGenre(ctx, genre)
+		if err != nil {
+			log.Printf("[GENRE] Error getting subscriptions for genre '%s': %v", genre, err)
+		} else {
+			log.Printf("[GENRE] Found %d subscriptions for album genre '%s'", len(genreSubscriptions), genre)
+			for _, sub := range genreSubscriptions {
+				// Only notify if user hasn't been notified already (to avoid duplicates)
+				if !notifiedUsers[sub.UserID] {
+					message := fmt.Sprintf("New album '%s' in genre %s has been released", albumName, genre)
+					log.Printf("[GENRE] Creating genre notification for user %s: %s", sub.UserID, message)
+					createNotification(cfg.NotificationsServiceURL, sub.UserID, "new_album", message, albumID)
+					notifiedUsers[sub.UserID] = true
+				} else {
+					log.Printf("[GENRE] User %s already notified (skipping genre notification to avoid duplicate)", sub.UserID)
+				}
+			}
+		}
+	} else {
+		log.Printf("[GENRE] No genre provided in album event, skipping genre notifications")
 	}
 
 	log.Printf("Processed new_album event for album %s", albumID)
@@ -240,14 +319,45 @@ func handleNewAlbumEvent(ctx context.Context, event map[string]interface{}, repo
 
 // handleNewSongEvent processes new song events
 func handleNewSongEvent(ctx context.Context, event map[string]interface{}, repo *store.SubscriptionRepository, cfg *config.Config) {
+	// Log entire event for debugging
+	eventJSON, _ := json.Marshal(event)
+	log.Printf("[DEBUG] handleNewSongEvent called with event: %s", string(eventJSON))
+	
 	songID, _ := event["songId"].(string)
 	songName, _ := event["name"].(string)
+	genre, _ := event["genre"].(string)
 	artistIDs, _ := event["artistIds"].([]interface{})
+	artistNamesInterface, _ := event["artistNames"].([]interface{})
+
+	log.Printf("[DEBUG] Processing new_song event - SongID: %s, Name: %s, Genre: '%s' (empty: %v)", songID, songName, genre, genre == "")
 
 	if songID == "" {
 		log.Printf("Invalid new_song event: missing songId")
 		return
 	}
+
+	// Convert artist names to string slice
+	artistNames := make([]string, 0, len(artistNamesInterface))
+	for _, nameInterface := range artistNamesInterface {
+		if name, ok := nameInterface.(string); ok {
+			artistNames = append(artistNames, name)
+		}
+	}
+
+	// Format artist names for message
+	artistNamesStr := "artist"
+	if len(artistNames) > 0 {
+		if len(artistNames) == 1 {
+			artistNamesStr = artistNames[0]
+		} else if len(artistNames) == 2 {
+			artistNamesStr = artistNames[0] + " and " + artistNames[1]
+		} else {
+			artistNamesStr = artistNames[0] + " and others"
+		}
+	}
+
+	// Track notified users to avoid duplicate notifications
+	notifiedUsers := make(map[string]bool)
 
 	// For each artist, find subscribers and notify them
 	for _, artistIDInterface := range artistIDs {
@@ -263,9 +373,39 @@ func handleNewSongEvent(ctx context.Context, event map[string]interface{}, repo 
 		}
 
 		for _, sub := range subscriptions {
-			message := fmt.Sprintf("New song '%s' by artist has been added", songName)
-			createNotification(cfg.NotificationsServiceURL, sub.UserID, "new_song", message, songID)
+			if !notifiedUsers[sub.UserID] {
+				message := fmt.Sprintf("New song '%s' by %s has been added", songName, artistNamesStr)
+				createNotification(cfg.NotificationsServiceURL, sub.UserID, "new_song", message, songID)
+				notifiedUsers[sub.UserID] = true
+			}
 		}
+	}
+
+	// Also notify users subscribed to the genre (if genre is provided)
+	if genre != "" {
+		log.Printf("[GENRE] Checking genre subscriptions for genre: '%s' (length: %d)", genre, len(genre))
+		genreSubscriptions, err := repo.GetByGenre(ctx, genre)
+		if err != nil {
+			log.Printf("[GENRE] Error getting subscriptions for genre '%s': %v", genre, err)
+		} else {
+			log.Printf("[GENRE] Found %d subscriptions for genre '%s'", len(genreSubscriptions), genre)
+			if len(genreSubscriptions) == 0 {
+				log.Printf("[GENRE] WARNING: No subscriptions found for genre '%s' - this might indicate a matching issue", genre)
+			}
+			for _, sub := range genreSubscriptions {
+				// Only notify if user hasn't been notified already (to avoid duplicates)
+				if !notifiedUsers[sub.UserID] {
+					message := fmt.Sprintf("New song '%s' in genre %s has been added", songName, genre)
+					log.Printf("[GENRE] Creating genre notification for user %s: %s", sub.UserID, message)
+					createNotification(cfg.NotificationsServiceURL, sub.UserID, "new_song", message, songID)
+					notifiedUsers[sub.UserID] = true
+				} else {
+					log.Printf("[GENRE] User %s already notified (skipping genre notification to avoid duplicate)", sub.UserID)
+				}
+			}
+		}
+	} else {
+		log.Printf("[GENRE] No genre provided in event, skipping genre notifications")
 	}
 
 	log.Printf("Processed new_song event for song %s", songID)
@@ -300,6 +440,55 @@ func main() {
 	contentServiceCB := NewCircuitBreaker(3, 5*time.Second) // Open after 3 failures, reset after 5 seconds
 
 	mux := http.NewServeMux()
+
+	// emitSubscriptionEvent sends subscription event to recommendation-service asynchronously
+	emitSubscriptionEvent := func(recommendationServiceURL, userID, genre, eventType string) {
+		go func() {
+			event := map[string]interface{}{
+				"type":   eventType,
+				"userId": userID,
+				"genre":  genre,
+			}
+
+			eventJSON, err := json.Marshal(event)
+			if err != nil {
+				log.Printf("Failed to marshal subscription event: %v", err)
+				return
+			}
+
+			url := recommendationServiceURL + "/events"
+			req, err := http.NewRequest("POST", url, bytes.NewBuffer(eventJSON))
+			if err != nil {
+				log.Printf("Failed to create subscription event request: %v", err)
+				return
+			}
+
+			req.Header.Set("Content-Type", "application/json")
+
+			tr := &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			}
+			client := &http.Client{
+				Timeout:   5 * time.Second,
+				Transport: tr,
+			}
+
+			log.Printf("Sending subscription event to %s: type=%s, userId=%s, genre=%s", url, eventType, userID, genre)
+			resp, err := client.Do(req)
+			if err != nil {
+				log.Printf("Failed to emit subscription event to recommendation-service: %v", err)
+				return
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
+				log.Printf("Recommendation-service returned non-OK status for subscription event: %d", resp.StatusCode)
+				return
+			}
+
+			log.Printf("Subscription event emitted successfully: %s", eventType)
+		}()
+	}
 
 	// Health check
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -456,7 +645,10 @@ func main() {
 		}
 
 		if r.Method == http.MethodPost {
-			genre := r.URL.Query().Get("genre")
+			genre, err := url.QueryUnescape(r.URL.Query().Get("genre"))
+			if err != nil {
+				genre = r.URL.Query().Get("genre") // Fallback to raw value
+			}
 			if genre == "" {
 				http.Error(w, "genre parameter is required", http.StatusBadRequest)
 				return
@@ -504,6 +696,8 @@ func main() {
 			}
 
 			log.Printf("User %s subscribed to genre %s", userID, genre)
+			// Emit event to recommendation-service
+			emitSubscriptionEvent(cfg.RecommendationServiceURL, userID, genre, "subscription_created")
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("Subscribed to genre successfully"))
 		} else if r.Method == http.MethodDelete {
@@ -536,6 +730,8 @@ func main() {
 			}
 
 			log.Printf("User %s unsubscribed from genre %s", userID, genre)
+			// Emit event to recommendation-service
+			emitSubscriptionEvent(cfg.RecommendationServiceURL, userID, genre, "subscription_deleted")
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("Unsubscribed from genre successfully"))
 		} else {
@@ -556,6 +752,10 @@ func main() {
 			http.Error(w, "invalid event payload", http.StatusBadRequest)
 			return
 		}
+
+		// Debug: log the entire event
+		eventJSON, _ := json.Marshal(event)
+		log.Printf("Received event: %s", string(eventJSON))
 
 		eventType, ok := event["type"].(string)
 		if !ok {

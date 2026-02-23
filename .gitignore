@@ -8,6 +8,7 @@ data/mongodb-content/*
 data/mongodb-ratings/*
 data/mongodb-subscriptions/*
 data/cassandra/*
+data/neo4j/*
 
 # But keep .gitkeep files
 !data/mongodb-users/.gitkeep

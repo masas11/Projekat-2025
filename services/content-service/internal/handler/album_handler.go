@@ -24,13 +24,15 @@ func extractAlbumID(path string) string {
 
 type AlbumHandler struct {
 	Repo                    *store.AlbumRepository
+	ArtistRepo              *store.ArtistRepository
 	SubscriptionsServiceURL string
 	Logger                  *logger.Logger
 }
 
-func NewAlbumHandler(repo *store.AlbumRepository, subscriptionsServiceURL string, log *logger.Logger) *AlbumHandler {
+func NewAlbumHandler(repo *store.AlbumRepository, artistRepo *store.ArtistRepository, subscriptionsServiceURL string, log *logger.Logger) *AlbumHandler {
 	return &AlbumHandler{
 		Repo:                    repo,
+		ArtistRepo:              artistRepo,
 		SubscriptionsServiceURL: subscriptionsServiceURL,
 		Logger:                  log,
 	}
@@ -94,13 +96,23 @@ func (h *AlbumHandler) CreateAlbum(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	// Get artist names for the event
+	artistNames := make([]string, 0, len(album.ArtistIDs))
+	for _, artistID := range album.ArtistIDs {
+		artist, err := h.ArtistRepo.GetByID(r.Context(), artistID)
+		if err == nil && artist != nil {
+			artistNames = append(artistNames, artist.Name)
+		}
+	}
+
 	// Emit event for new album (asynchronous)
 	event := events.NewAlbumEvent{
-		Type:      events.EventTypeNewAlbum,
-		AlbumID:   album.ID,
-		Name:      album.Name,
-		Genre:     album.Genre,
-		ArtistIDs: album.ArtistIDs,
+		Type:        events.EventTypeNewAlbum,
+		AlbumID:     album.ID,
+		Name:        album.Name,
+		Genre:       album.Genre,
+		ArtistIDs:   album.ArtistIDs,
+		ArtistNames: artistNames,
 	}
 	events.EmitEvent(h.SubscriptionsServiceURL, event)
 

@@ -25,16 +25,18 @@ func extractArtistID(path string) string {
 }
 
 type ArtistHandler struct {
-	Repo                    *store.ArtistRepository
-	SubscriptionsServiceURL string
-	Logger                  *logger.Logger
+	Repo                     *store.ArtistRepository
+	SubscriptionsServiceURL  string
+	RecommendationServiceURL  string
+	Logger                   *logger.Logger
 }
 
-func NewArtistHandler(repo *store.ArtistRepository, subscriptionsServiceURL string, log *logger.Logger) *ArtistHandler {
+func NewArtistHandler(repo *store.ArtistRepository, subscriptionsServiceURL, recommendationServiceURL string, log *logger.Logger) *ArtistHandler {
 	return &ArtistHandler{
-		Repo:                    repo,
-		SubscriptionsServiceURL: subscriptionsServiceURL,
-		Logger:                  log,
+		Repo:                     repo,
+		SubscriptionsServiceURL:  subscriptionsServiceURL,
+		RecommendationServiceURL: recommendationServiceURL,
+		Logger:                   log,
 	}
 }
 
@@ -102,6 +104,13 @@ func (h *ArtistHandler) CreateArtist(w http.ResponseWriter, r *http.Request) {
 		Genres:   artist.Genres,
 	}
 	events.EmitEvent(h.SubscriptionsServiceURL, event)
+	// Also emit to recommendation-service
+	events.EmitEvent(h.RecommendationServiceURL, map[string]interface{}{
+		"type":     "artist_created",
+		"artistId": artist.ID,
+		"name":     artist.Name,
+		"genres":   artist.Genres,
+	})
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)

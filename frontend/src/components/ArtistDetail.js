@@ -6,7 +6,7 @@ import api from '../services/api';
 const ArtistDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, isAdmin } = useAuth();
   const [artist, setArtist] = useState(null);
   const [albums, setAlbums] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -115,7 +115,7 @@ const ArtistDetail = () => {
         </button>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
           <h2 style={{ margin: 0 }}>{artist.name}</h2>
-          {isAuthenticated && (
+          {isAuthenticated && !isAdmin() && (
             <button
               className={isSubscribed ? "btn btn-secondary" : "btn btn-primary"}
               onClick={handleSubscribe}

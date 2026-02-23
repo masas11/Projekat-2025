@@ -374,15 +374,15 @@ func main() {
 		proxyRequest(w, r, cfg.SubscriptionsServiceURL+"/subscriptions"+query, appLogger)
 	})))
 
-	// POST /api/subscriptions/subscribe-artist - subscribe to artist (requires auth)
-	// DELETE /api/subscriptions/subscribe-artist - unsubscribe from artist (requires auth)
-	mux.HandleFunc("/api/subscriptions/subscribe-artist", globalRateLimit(middleware.RequireAuth(cfg, appLogger)(func(w http.ResponseWriter, r *http.Request) {
+	// POST /api/subscriptions/subscribe-artist - subscribe to artist (requires auth, non-admin only)
+	// DELETE /api/subscriptions/subscribe-artist - unsubscribe from artist (requires auth, non-admin only)
+	mux.HandleFunc("/api/subscriptions/subscribe-artist", globalRateLimit(requireNonAdmin(func(w http.ResponseWriter, r *http.Request) {
 		proxyRequest(w, r, cfg.SubscriptionsServiceURL+"/subscribe-artist", appLogger)
 	})))
 
-	// POST /api/subscriptions/subscribe-genre - subscribe to genre (requires auth)
-	// DELETE /api/subscriptions/subscribe-genre - unsubscribe from genre (requires auth)
-	mux.HandleFunc("/api/subscriptions/subscribe-genre", globalRateLimit(middleware.RequireAuth(cfg, appLogger)(func(w http.ResponseWriter, r *http.Request) {
+	// POST /api/subscriptions/subscribe-genre - subscribe to genre (requires auth, non-admin only)
+	// DELETE /api/subscriptions/subscribe-genre - unsubscribe from genre (requires auth, non-admin only)
+	mux.HandleFunc("/api/subscriptions/subscribe-genre", globalRateLimit(requireNonAdmin(func(w http.ResponseWriter, r *http.Request) {
 		proxyRequest(w, r, cfg.SubscriptionsServiceURL+"/subscribe-genre", appLogger)
 	})))
 
@@ -404,7 +404,7 @@ func main() {
 			// Check if user is NOT admin
 			if claims.Role == "ADMIN" {
 				enableCORS(w, r)
-				http.Error(w, "admin users cannot rate songs", http.StatusForbidden)
+				http.Error(w, "admin users cannot perform this action", http.StatusForbidden)
 				return
 			}
 
@@ -497,8 +497,8 @@ func main() {
 			userId = claims.UserID
 		}
 
-		// Create new request with updated query
-		targetURL := cfg.RatingsServiceURL + "/recommendations?userId=" + userId
+		// Use recommendation-service instead of ratings-service
+		targetURL := cfg.RecommendationServiceURL + "/recommendations?userId=" + userId
 		proxyRequest(w, r, targetURL, appLogger)
 	})))
 

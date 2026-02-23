@@ -3,11 +3,12 @@ package config
 import "os"
 
 type Config struct {
-	Port                 string
-	MongoDBURI           string
-	MongoDBDatabase      string
-	JWTSecret            string
+	Port                    string
+	MongoDBURI              string
+	MongoDBDatabase         string
+	JWTSecret               string
 	SubscriptionsServiceURL string
+	RecommendationServiceURL string
 }
 
 func Load() *Config {
@@ -36,11 +37,17 @@ func Load() *Config {
 		subscriptionsServiceURL = "http://subscriptions-service:8004"
 	}
 
+	recommendationServiceURL := os.Getenv("RECOMMENDATION_SERVICE_URL")
+	if recommendationServiceURL == "" {
+		recommendationServiceURL = "http://recommendation-service:8006"
+	}
+
 	return &Config{
-		Port:                 port,
-		MongoDBURI:           mongoURI,
-		MongoDBDatabase:      mongoDB,
-		JWTSecret:            jwtSecret,
-		SubscriptionsServiceURL: subscriptionsServiceURL,
+		Port:                     port,
+		MongoDBURI:               mongoURI,
+		MongoDBDatabase:          mongoDB,
+		JWTSecret:                jwtSecret,
+		SubscriptionsServiceURL:  subscriptionsServiceURL,
+		RecommendationServiceURL: recommendationServiceURL,
 	}
 }

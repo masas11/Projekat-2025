@@ -28,20 +28,22 @@ type NewArtistEvent struct {
 }
 
 type NewAlbumEvent struct {
-	Type     EventType `json:"type"`
-	AlbumID  string    `json:"albumId"`
-	Name     string    `json:"name"`
-	Genre    string    `json:"genre"`
-	ArtistIDs []string `json:"artistIds"`
-}
-
-type NewSongEvent struct {
 	Type      EventType `json:"type"`
-	SongID    string    `json:"songId"`
+	AlbumID   string    `json:"albumId"`
 	Name      string    `json:"name"`
 	Genre     string    `json:"genre"`
 	ArtistIDs []string  `json:"artistIds"`
-	AlbumID   string    `json:"albumId"`
+	ArtistNames []string `json:"artistNames"` // Added for better notification messages
+}
+
+type NewSongEvent struct {
+	Type        EventType `json:"type"`
+	SongID      string    `json:"songId"`
+	Name        string    `json:"name"`
+	Genre       string    `json:"genre"`
+	ArtistIDs   []string  `json:"artistIds"`
+	ArtistNames []string  `json:"artistNames"` // Added for better notification messages
+	AlbumID     string    `json:"albumId"`
 }
 
 // EmitEvent sends an event to subscriptions-service asynchronously

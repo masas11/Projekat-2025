@@ -111,9 +111,28 @@ const Songs = () => {
 
   const handleArtistSelect = (e) => {
     const selectedOptions = Array.from(e.target.selectedOptions, option => option.value);
+    
+    // Get artist IDs from album (support both camelCase and PascalCase)
+    const getAlbumArtistIds = (album) => {
+      return album.artistIds || album.artistIDs || [];
+    };
+    
+    // Reset album selection if current album doesn't belong to any selected artist
+    let newAlbumId = formData.albumId;
+    if (newAlbumId && selectedOptions.length > 0) {
+      const currentAlbum = albums.find(a => a.id === newAlbumId);
+      if (currentAlbum) {
+        const albumArtistIds = getAlbumArtistIds(currentAlbum);
+        if (albumArtistIds.length === 0 || !selectedOptions.some(artistId => albumArtistIds.includes(artistId))) {
+          newAlbumId = ''; // Reset if album doesn't belong to selected artists
+        }
+      }
+    }
+    
     setFormData({
       ...formData,
       selectedArtistIds: selectedOptions,
+      albumId: newAlbumId,
     });
   };
 
@@ -345,40 +364,6 @@ const Songs = () => {
                     />
                   </div>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
-                  <div className="form-group">
-                    <label>🎭 Žanr:</label>
-                    <select
-                      name="genre"
-                      value={formData.genre}
-                      onChange={handleChange}
-                      required
-                    >
-                      <option value="">Izaberite žanr</option>
-                      {predefinedGenres.map((genre) => (
-                        <option key={genre} value={genre}>
-                          {genre}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label>💿 Album:</label>
-                    <select
-                      name="albumId"
-                      value={formData.albumId}
-                      onChange={handleChange}
-                      required
-                    >
-                      <option value="">Izaberite album</option>
-                      {albums.map((album) => (
-                        <option key={album.id} value={album.id}>
-                          {album.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
                 <div className="form-group">
                   <label>🎤 Izvođači (držite Ctrl/Cmd za višestruki izbor):</label>
                   <select
@@ -400,6 +385,89 @@ const Songs = () => {
                       ✓ Izabrano: {formData.selectedArtistIds.length} izvođač(a)
                     </small>
                   )}
+                  {formData.selectedArtistIds.length === 0 && (
+                    <small style={{ display: 'block', marginTop: '6px', color: '#999', fontSize: '12px' }}>
+                      ⚠️ Prvo izaberite izvođače da biste videli njihove albume
+                    </small>
+                  )}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
+                  <div className="form-group">
+                    <label>💿 Album:</label>
+                    <select
+                      name="albumId"
+                      value={formData.albumId}
+                      onChange={handleChange}
+                      required
+                      disabled={formData.selectedArtistIds.length === 0}
+                    >
+                      <option value="">
+                        {formData.selectedArtistIds.length === 0 
+                          ? 'Prvo izaberite izvođače' 
+                          : 'Izaberite album'}
+                      </option>
+                      {(() => {
+                        // Helper function to get artist IDs from album
+                        const getAlbumArtistIds = (album) => {
+                          return album.artistIds || album.artistIDs || [];
+                        };
+                        
+                        // Filter albums to show only those belonging to selected artists
+                        const filteredAlbums = albums.filter(album => {
+                          const albumArtistIds = getAlbumArtistIds(album);
+                          if (albumArtistIds.length === 0) {
+                            return false;
+                          }
+                          if (formData.selectedArtistIds.length === 0) {
+                            return false;
+                          }
+                          // Check if album belongs to at least one selected artist
+                          return formData.selectedArtistIds.some(artistId => 
+                            albumArtistIds.includes(artistId)
+                          );
+                        });
+                        return filteredAlbums.map((album) => (
+                          <option key={album.id} value={album.id}>
+                            {album.name}
+                          </option>
+                        ));
+                      })()}
+                    </select>
+                    {formData.selectedArtistIds.length > 0 && (() => {
+                      const getAlbumArtistIds = (album) => {
+                        return album.artistIds || album.artistIDs || [];
+                      };
+                      const filteredAlbums = albums.filter(album => {
+                        const albumArtistIds = getAlbumArtistIds(album);
+                        if (albumArtistIds.length === 0) return false;
+                        return formData.selectedArtistIds.some(artistId => albumArtistIds.includes(artistId));
+                      });
+                      if (filteredAlbums.length === 0) {
+                        return (
+                          <small style={{ display: 'block', marginTop: '6px', color: '#ff6b6b', fontSize: '12px' }}>
+                            ⚠️ Izabrani izvođači nemaju albume. Prvo kreirajte album za ovog izvođača.
+                          </small>
+                        );
+                      }
+                      return null;
+                    })()}
+                  </div>
+                  <div className="form-group">
+                    <label>🎭 Žanr:</label>
+                    <select
+                      name="genre"
+                      value={formData.genre}
+                      onChange={handleChange}
+                      required
+                    >
+                      <option value="">Izaberite žanr</option>
+                      {predefinedGenres.map((genre) => (
+                        <option key={genre} value={genre}>
+                          {genre}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
                 <div className="form-group">
                   <label>🔊 Audio File URL:</label>
@@ -480,7 +548,7 @@ const Songs = () => {
                       </option>
                     ))}
                   </select>
-                  {isAuthenticated && selectedGenre && (
+                  {isAuthenticated && !isAdmin() && selectedGenre && (
                     <button
                       className={subscribedGenres.includes(selectedGenre) ? "btn btn-secondary" : "btn btn-primary"}
                       onClick={() => handleSubscribeToGenre(selectedGenre)}

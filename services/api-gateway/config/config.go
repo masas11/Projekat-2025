@@ -10,6 +10,7 @@ type Config struct {
 	NotificationsServiceURL string
 	SubscriptionsServiceURL string
 	RatingsServiceURL       string
+	RecommendationServiceURL string
 }
 
 func Load() *Config {
@@ -43,18 +44,24 @@ func Load() *Config {
 		ratingsURL = "http://localhost:8003"
 	}
 
+	recommendationURL := os.Getenv("RECOMMENDATION_SERVICE_URL")
+	if recommendationURL == "" {
+		recommendationURL = "http://localhost:8006"
+	}
+
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
 		jwtSecret = "your-secret-key-change-in-production" // Default, should match users-service
 	}
 
 	return &Config{
-		Port:                    port,
-		JWTSecret:               jwtSecret,
-		UsersServiceURL:         usersURL,
-		ContentServiceURL:       contentURL,
-		NotificationsServiceURL: notificationsURL,
-		SubscriptionsServiceURL: subscriptionsURL,
-		RatingsServiceURL:       ratingsURL,
+		Port:                     port,
+		JWTSecret:                jwtSecret,
+		UsersServiceURL:          usersURL,
+		ContentServiceURL:        contentURL,
+		NotificationsServiceURL:  notificationsURL,
+		SubscriptionsServiceURL:  subscriptionsURL,
+		RatingsServiceURL:        ratingsURL,
+		RecommendationServiceURL: recommendationURL,
 	}
 }

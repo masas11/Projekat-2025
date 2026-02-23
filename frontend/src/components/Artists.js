@@ -65,6 +65,65 @@ const Artists = () => {
     }
   };
 
+  const loadSubscriptions = async () => {
+    if (!isAuthenticated || !user) return;
+
+    try {
+      const subscriptions = await api.getSubscriptions();
+      if (Array.isArray(subscriptions)) {
+        const genres = subscriptions
+          .filter(sub => sub && sub.type === 'genre')
+          .map(sub => sub.genre);
+        setSubscribedGenres(genres);
+      } else {
+        setSubscribedGenres([]);
+      }
+    } catch (err) {
+      console.error('Error loading subscriptions:', err);
+      setSubscribedGenres([]);
+    }
+  };
+
+  const handleSubscribeToGenre = async (genre) => {
+    if (!isAuthenticated || !user) {
+      setError('Morate biti prijavljeni da biste se pretplatili na žanr');
+      return;
+    }
+
+    if (!genre) {
+      setError('Izaberite žanr za pretplatu');
+      return;
+    }
+
+    const isSubscribed = subscribedGenres.includes(genre);
+
+    setIsSubscribing(true);
+    setSubscriptionMessage('');
+    setError('');
+
+    try {
+      if (isSubscribed) {
+        await api.unsubscribeFromGenre(genre, user.id);
+        setSubscribedGenres(subscribedGenres.filter(g => g !== genre));
+        setSubscriptionMessage(`Uspešno ste se odjavili sa pretplate na žanr: ${genre}!`);
+      } else {
+        await api.subscribeToGenre(genre, user.id);
+        setSubscribedGenres([...subscribedGenres, genre]);
+        setSubscriptionMessage(`Uspešno ste se pretplatili na žanr: ${genre}!`);
+      }
+      setTimeout(() => setSubscriptionMessage(''), 3000);
+    } catch (err) {
+      if (err.message && err.message.includes('Already subscribed')) {
+        setSubscribedGenres([...subscribedGenres, genre]);
+        setError('Već ste pretplaćeni na ovaj žanr');
+      } else {
+        setError(err.message || 'Greška pri pretplati na žanr');
+      }
+    } finally {
+      setIsSubscribing(false);
+    }
+  };
+
   const handleChange = (e) => {
     setFormData({
       ...formData,
@@ -298,7 +357,7 @@ const Artists = () => {
                       <option key={genre} value={genre}>{genre}</option>
                     ))}
                   </select>
-                  {isAuthenticated && selectedGenre && (
+                  {isAuthenticated && !isAdmin() && selectedGenre && (
                     <button
                       className={subscribedGenres.includes(selectedGenre) ? "btn btn-secondary" : "btn btn-primary"}
                       onClick={() => handleSubscribeToGenre(selectedGenre)}

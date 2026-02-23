@@ -16,6 +16,7 @@ import (
 	"ratings-service/internal/model"
 	"ratings-service/internal/store"
 
+	"bytes"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -329,6 +330,8 @@ func main() {
 				return
 			}
 			log.Printf("Updated rating for song %s by user %s", songID, userID)
+			// Emit event to recommendation-service
+			emitRatingEvent(cfg.RecommendationServiceURL, userID, songID, ratingValue, "rating_updated")
 		} else {
 			// Create new rating
 			err = ratingStore.Create(ratingCtx, ratingModel)
@@ -339,6 +342,8 @@ func main() {
 				return
 			}
 			log.Printf("Created rating for song %s by user %s", songID, userID)
+			// Emit event to recommendation-service
+			emitRatingEvent(cfg.RecommendationServiceURL, userID, songID, ratingValue, "rating_created")
 		}
 
 		w.WriteHeader(http.StatusOK)
@@ -393,6 +398,8 @@ func main() {
 		}
 
 		log.Printf("Deleted rating for song %s by user %s", songID, userID)
+		// Emit event to recommendation-service for rating deletion
+		emitRatingEvent(cfg.RecommendationServiceURL, userID, songID, 0, "rating_deleted")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("Rating deleted successfully"))
 	})
@@ -498,6 +505,51 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(response)
 	})
+
+	// emitRatingEvent sends rating event to recommendation-service asynchronously
+	emitRatingEvent := func(recommendationServiceURL, userID, songID string, rating int, eventType string) {
+		go func() {
+			event := map[string]interface{}{
+				"type":    eventType,
+				"userId":  userID,
+				"songId":  songID,
+				"rating":  rating,
+			}
+
+			eventJSON, err := json.Marshal(event)
+			if err != nil {
+				log.Printf("Failed to marshal rating event: %v", err)
+				return
+			}
+
+			url := recommendationServiceURL + "/events"
+			req, err := http.NewRequest("POST", url, bytes.NewBuffer(eventJSON))
+			if err != nil {
+				log.Printf("Failed to create rating event request: %v", err)
+				return
+			}
+
+			req.Header.Set("Content-Type", "application/json")
+
+			client := &http.Client{
+				Timeout: 2 * time.Second,
+			}
+
+			resp, err := client.Do(req)
+			if err != nil {
+				log.Printf("Failed to emit rating event to recommendation-service: %v", err)
+				return
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
+				log.Printf("Recommendation-service returned non-OK status for rating event: %d", resp.StatusCode)
+				return
+			}
+
+			log.Printf("Rating event emitted successfully: %s", eventType)
+		}()
+	}
 
 	log.Println("Ratings service running on port", cfg.Port)
 	

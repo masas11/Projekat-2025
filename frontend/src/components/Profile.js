@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 
 const Profile = () => {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, isAdmin } = useAuth();
   const navigate = useNavigate();
   const [subscriptions, setSubscriptions] = useState([]);
   const [artists, setArtists] = useState([]);
@@ -118,92 +118,96 @@ const Profile = () => {
         </div>
       )}
 
-      <div className="card">
-        <h3>Pretplate na Umetnike ({artistSubscriptions.length})</h3>
-        {artistSubscriptions.length === 0 ? (
-          <p>Nemate pretplata na umetnike.</p>
-        ) : (
-          <div>
-            {artistSubscriptions.map((sub) => (
-              <div
-                key={sub.id}
-                className="list-item"
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '15px',
-                  marginBottom: '10px',
-                  border: '1px solid #ddd',
-                  borderRadius: '5px'
-                }}
-              >
-                <div>
-                  <h4
-                    style={{ margin: 0, cursor: 'pointer' }}
-                    onClick={() => navigate(`/artists/${sub.artistId}`)}
+      {!isAdmin() && (
+        <>
+          <div className="card">
+            <h3>Pretplate na Umetnike ({artistSubscriptions.length})</h3>
+            {artistSubscriptions.length === 0 ? (
+              <p>Nemate pretplata na umetnike.</p>
+            ) : (
+              <div>
+                {artistSubscriptions.map((sub) => (
+                  <div
+                    key={sub.id}
+                    className="list-item"
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '15px',
+                      marginBottom: '10px',
+                      border: '1px solid #ddd',
+                      borderRadius: '5px'
+                    }}
                   >
-                    {getArtistName(sub.artistId)}
-                  </h4>
-                  <p style={{ margin: '5px 0 0 0', fontSize: '0.9em', color: '#666' }}>
-                    Pretplaćen od: {new Date(sub.createdAt).toLocaleDateString()}
-                  </p>
-                </div>
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => handleUnsubscribeArtist(sub.artistId)}
-                  style={{ marginLeft: '10px' }}
-                >
-                  Otkaži pretplatu
-                </button>
+                    <div>
+                      <h4
+                        style={{ margin: 0, cursor: 'pointer' }}
+                        onClick={() => navigate(`/artists/${sub.artistId}`)}
+                      >
+                        {getArtistName(sub.artistId)}
+                      </h4>
+                      <p style={{ margin: '5px 0 0 0', fontSize: '0.9em', color: '#666' }}>
+                        Pretplaćen od: {new Date(sub.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => handleUnsubscribeArtist(sub.artistId)}
+                      style={{ marginLeft: '10px' }}
+                    >
+                      Otkaži pretplatu
+                    </button>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
-        )}
-      </div>
 
-      <div className="card">
-        <h3>Pretplate na Žanrove ({genreSubscriptions.length})</h3>
-        {genreSubscriptions.length === 0 ? (
-          <p>Nemate pretplata na žanrove.</p>
-        ) : (
-          <div>
-            {genreSubscriptions.map((sub) => (
-              <div
-                key={sub.id}
-                className="list-item"
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '15px',
-                  marginBottom: '10px',
-                  border: '1px solid #ddd',
-                  borderRadius: '5px'
-                }}
-              >
-                <div>
-                  <h4 style={{ margin: 0 }}>
-                    <span className="genre-tag" style={{ fontSize: '1.1em' }}>
-                      {sub.genre}
-                    </span>
-                  </h4>
-                  <p style={{ margin: '5px 0 0 0', fontSize: '0.9em', color: '#666' }}>
-                    Pretplaćen od: {new Date(sub.createdAt).toLocaleDateString()}
-                  </p>
-                </div>
-                <button
-                  className="btn btn-secondary"
-                  onClick={() => handleUnsubscribeGenre(sub.genre)}
-                  style={{ marginLeft: '10px' }}
-                >
-                  Otkaži pretplatu
-                </button>
+          <div className="card">
+            <h3>Pretplate na Žanrove ({genreSubscriptions.length})</h3>
+            {genreSubscriptions.length === 0 ? (
+              <p>Nemate pretplata na žanrove.</p>
+            ) : (
+              <div>
+                {genreSubscriptions.map((sub) => (
+                  <div
+                    key={sub.id}
+                    className="list-item"
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '15px',
+                      marginBottom: '10px',
+                      border: '1px solid #ddd',
+                      borderRadius: '5px'
+                    }}
+                  >
+                    <div>
+                      <h4 style={{ margin: 0 }}>
+                        <span className="genre-tag" style={{ fontSize: '1.1em' }}>
+                          {sub.genre}
+                        </span>
+                      </h4>
+                      <p style={{ margin: '5px 0 0 0', fontSize: '0.9em', color: '#666' }}>
+                        Pretplaćen od: {new Date(sub.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => handleUnsubscribeGenre(sub.genre)}
+                      style={{ marginLeft: '10px' }}
+                    >
+                      Otkaži pretplatu
+                    </button>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
-        )}
-      </div>
+        </>
+      )}
     </div>
   );
 };

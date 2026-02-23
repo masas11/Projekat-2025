@@ -23,18 +23,22 @@ func extractSongID(path string) string {
 }
 
 type SongHandler struct {
-	Repo                    *store.SongRepository
-	AlbumRepo               *store.AlbumRepository
-	SubscriptionsServiceURL string
-	Logger                  *logger.Logger
+	Repo                     *store.SongRepository
+	AlbumRepo                *store.AlbumRepository
+	ArtistRepo               *store.ArtistRepository
+	SubscriptionsServiceURL  string
+	RecommendationServiceURL  string
+	Logger                   *logger.Logger
 }
 
-func NewSongHandler(repo *store.SongRepository, albumRepo *store.AlbumRepository, subscriptionsServiceURL string, log *logger.Logger) *SongHandler {
+func NewSongHandler(repo *store.SongRepository, albumRepo *store.AlbumRepository, artistRepo *store.ArtistRepository, subscriptionsServiceURL, recommendationServiceURL string, log *logger.Logger) *SongHandler {
 	return &SongHandler{
-		Repo:                    repo,
-		AlbumRepo:               albumRepo,
-		SubscriptionsServiceURL: subscriptionsServiceURL,
-		Logger:                  log,
+		Repo:                     repo,
+		AlbumRepo:                albumRepo,
+		ArtistRepo:               artistRepo,
+		SubscriptionsServiceURL:  subscriptionsServiceURL,
+		RecommendationServiceURL: recommendationServiceURL,
+		Logger:                   log,
 	}
 }
 
@@ -114,16 +118,36 @@ func (h *SongHandler) CreateSong(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	// Get artist names for the event
+	artistNames := make([]string, 0, len(song.ArtistIDs))
+	for _, artistID := range song.ArtistIDs {
+		artist, err := h.ArtistRepo.GetByID(r.Context(), artistID)
+		if err == nil && artist != nil {
+			artistNames = append(artistNames, artist.Name)
+		}
+	}
+
 	// Emit event for new song (asynchronous)
 	event := events.NewSongEvent{
-		Type:      events.EventTypeNewSong,
-		SongID:    song.ID,
-		Name:      song.Name,
-		Genre:     song.Genre,
-		ArtistIDs: song.ArtistIDs,
-		AlbumID:   song.AlbumID,
+		Type:        events.EventTypeNewSong,
+		SongID:      song.ID,
+		Name:        song.Name,
+		Genre:       song.Genre,
+		ArtistIDs:   song.ArtistIDs,
+		ArtistNames: artistNames,
+		AlbumID:     song.AlbumID,
 	}
 	events.EmitEvent(h.SubscriptionsServiceURL, event)
+	// Also emit to recommendation-service
+	events.EmitEvent(h.RecommendationServiceURL, map[string]interface{}{
+		"type":      "song_created",
+		"songId":    song.ID,
+		"name":      song.Name,
+		"genre":     song.Genre,
+		"artistIds": song.ArtistIDs,
+		"albumId":   song.AlbumID,
+		"duration":  song.Duration,
+	})
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)

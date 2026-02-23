@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"log"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"recommendation-service/internal/model"
@@ -139,6 +140,29 @@ func (s *Neo4jStore) RemoveSubscription(ctx context.Context, userID, genre strin
 func (s *Neo4jStore) GetSubscribedGenreSongs(ctx context.Context, userID string) ([]*model.SongRecommendation, error) {
 	session := s.driver.NewSession(ctx, neo4j.SessionConfig{})
 	defer session.Close(ctx)
+
+	// First, check if user has subscriptions
+	checkQuery := `
+		MATCH (u:User {id: $userID})-[:SUBSCRIBED_TO]->(g:Genre)
+		RETURN g.name AS genre
+	`
+	checkResult, err := session.Run(ctx, checkQuery, map[string]interface{}{
+		"userID": userID,
+	})
+	if err == nil {
+		var subscribedGenres []string
+		for checkResult.Next(ctx) {
+			record := checkResult.Record()
+			if genre, ok := record.Get("genre"); ok && genre != nil {
+				subscribedGenres = append(subscribedGenres, genre.(string))
+			}
+		}
+		if len(subscribedGenres) == 0 {
+			log.Printf("User %s has no subscriptions in Neo4j", userID)
+			return []*model.SongRecommendation{}, nil
+		}
+		log.Printf("User %s is subscribed to genres: %v", userID, subscribedGenres)
+	}
 
 	query := `
 		MATCH (u:User {id: $userID})-[:SUBSCRIBED_TO]->(g:Genre)<-[:BELONGS_TO]-(s:Song)

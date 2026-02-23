@@ -1,20 +1,15 @@
-import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 const Home = () => {
   const { isAuthenticated, user } = useAuth();
+  const location = useLocation();
   const [recommendations, setRecommendations] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    if (isAuthenticated && user?.id && user?.username !== 'admin') {
-      fetchRecommendations();
-    }
-  }, [isAuthenticated, user]);
-
-  const fetchRecommendations = async () => {
+  const fetchRecommendations = useCallback(async () => {
     setLoading(true);
     setError(null);
     
@@ -38,7 +33,31 @@ const Home = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [isAuthenticated, user]);
+
+  useEffect(() => {
+    if (isAuthenticated && user?.id && user?.username !== 'admin') {
+      fetchRecommendations();
+    }
+  }, [isAuthenticated, user, fetchRecommendations]);
+
+  // Refresh recommendations when navigating to home page
+  useEffect(() => {
+    if (location.pathname === '/' && isAuthenticated && user?.id && user?.username !== 'admin') {
+      fetchRecommendations();
+    }
+  }, [location.pathname, isAuthenticated, user, fetchRecommendations]);
+
+  // Refresh recommendations when window gets focus (user might have subscribed elsewhere)
+  useEffect(() => {
+    const handleFocus = () => {
+      if (isAuthenticated && user?.id && user?.username !== 'admin') {
+        fetchRecommendations();
+      }
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [isAuthenticated, user, fetchRecommendations]);
 
   const SongCard = ({ song, reason }) => (
     <div className="song-card-modern" style={{
@@ -413,7 +432,7 @@ const Home = () => {
                         <span>🎯</span>
                         <span>Na osnovu vaših pretplata</span>
                       </h3>
-                      {recommendations.subscribedGenreSongs.map((song, index) => (
+                      {recommendations.subscribedGenreSongs.slice(0, 5).map((song, index) => (
                         <SongCard key={index} song={song} reason={song.reason} />
                       ))}
                     </div>

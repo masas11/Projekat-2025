@@ -166,6 +166,27 @@ func main() {
 	// Global rate limiting: 100 requests per minute per IP (DoS protection)
 	globalRateLimit := middleware.RateLimit(100, 1*time.Minute)
 
+	// Helper function to check if user is not admin
+	requireNonAdmin := func(next http.HandlerFunc) http.HandlerFunc {
+		return middleware.RequireAuth(cfg, appLogger)(func(w http.ResponseWriter, r *http.Request) {
+			claims, ok := r.Context().Value(middleware.UserContextKey).(*middleware.UserClaims)
+			if !ok || claims == nil {
+				enableCORS(w, r)
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+
+			// Check if user is NOT admin
+			if claims.Role == "ADMIN" {
+				enableCORS(w, r)
+				http.Error(w, "admin users cannot perform this action", http.StatusForbidden)
+				return
+			}
+
+			next(w, r)
+		})
+	}
+
 	// USERS SERVICE ROUTES
 	mux.HandleFunc("/api/users/health", globalRateLimit(func(w http.ResponseWriter, r *http.Request) {
 		proxyRequest(w, r, cfg.UsersServiceURL+"/health", appLogger)
@@ -391,27 +412,6 @@ func main() {
 		proxyRequest(w, r, cfg.RatingsServiceURL+"/health", appLogger)
 	}))
 
-	// Helper function to check if user is not admin
-	requireNonAdmin := func(next http.HandlerFunc) http.HandlerFunc {
-		return middleware.RequireAuth(cfg, appLogger)(func(w http.ResponseWriter, r *http.Request) {
-			claims, ok := r.Context().Value(middleware.UserContextKey).(*middleware.UserClaims)
-			if !ok || claims == nil {
-				enableCORS(w, r)
-				http.Error(w, "unauthorized", http.StatusUnauthorized)
-				return
-			}
-
-			// Check if user is NOT admin
-			if claims.Role == "ADMIN" {
-				enableCORS(w, r)
-				http.Error(w, "admin users cannot perform this action", http.StatusForbidden)
-				return
-			}
-
-			next(w, r)
-		})
-	}
-
 	// POST /api/ratings/rate-song - rate/update a song (requires auth, non-admin only)
 	mux.HandleFunc("/api/ratings/rate-song", globalRateLimit(requireNonAdmin(func(w http.ResponseWriter, r *http.Request) {
 		// Get userId from JWT token
@@ -498,7 +498,15 @@ func main() {
 		}
 
 		// Use recommendation-service instead of ratings-service
-		targetURL := cfg.RecommendationServiceURL + "/recommendations?userId=" + userId
+		// Clean userId to avoid double encoding
+		cleanUserId := userId
+		if idx := strings.Index(cleanUserId, "?"); idx != -1 {
+			cleanUserId = cleanUserId[:idx]
+		}
+		if idx := strings.Index(cleanUserId, "&"); idx != -1 {
+			cleanUserId = cleanUserId[:idx]
+		}
+		targetURL := cfg.RecommendationServiceURL + "/recommendations?userId=" + cleanUserId
 		proxyRequest(w, r, targetURL, appLogger)
 	})))
 

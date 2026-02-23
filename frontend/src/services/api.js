@@ -269,13 +269,15 @@ class ApiService {
   }
 
   async subscribeToGenre(genre, userId) {
-    return this.request(`/api/subscriptions/subscribe-genre?genre=${genre}&userId=${userId}`, {
+    const encodedGenre = encodeURIComponent(genre);
+    return this.request(`/api/subscriptions/subscribe-genre?genre=${encodedGenre}&userId=${userId}`, {
       method: 'POST',
     });
   }
 
   async unsubscribeFromGenre(genre, userId) {
-    return this.request(`/api/subscriptions/subscribe-genre?genre=${genre}&userId=${userId}`, {
+    const encodedGenre = encodeURIComponent(genre);
+    return this.request(`/api/subscriptions/subscribe-genre?genre=${encodedGenre}&userId=${userId}`, {
       method: 'DELETE',
     });
   }

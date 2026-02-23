@@ -125,9 +125,11 @@ func (s *Neo4jStore) syncRatingsData(ctx context.Context, ratingsServiceURL stri
 }
 
 func (s *Neo4jStore) syncSubscriptionsData(ctx context.Context, subscriptionsServiceURL string) error {
-	// Get all users from subscriptions (we'll need to get subscriptions per user)
+	// Note: subscriptions-service doesn't have an endpoint to get all subscriptions
+	// We'll need to get subscriptions per user, but we don't have a list of all users
 	// For now, we'll skip this and rely on events
-	// In production, you might want to add an endpoint to get all subscriptions
-	log.Println("Subscriptions sync skipped - will be populated via events")
+	// Users should re-subscribe or we need to add an admin endpoint to sync all subscriptions
+	log.Println("Subscriptions sync skipped - existing subscriptions should be re-synced via events")
+	log.Println("To sync existing subscriptions, users should unsubscribe and re-subscribe, or trigger sync manually")
 	return nil
 }

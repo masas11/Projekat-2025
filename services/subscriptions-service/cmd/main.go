@@ -702,7 +702,10 @@ func main() {
 			w.Write([]byte("Subscribed to genre successfully"))
 		} else if r.Method == http.MethodDelete {
 			// Unsubscribe from genre
-			genre := r.URL.Query().Get("genre")
+			genre, err := url.QueryUnescape(r.URL.Query().Get("genre"))
+			if err != nil {
+				genre = r.URL.Query().Get("genre") // Fallback to raw value
+			}
 			if genre == "" {
 				http.Error(w, "genre parameter is required", http.StatusBadRequest)
 				return
@@ -717,7 +720,7 @@ func main() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
-			err := subscriptionRepo.DeleteByUserAndGenre(ctx, userID, genre)
+			err = subscriptionRepo.DeleteByUserAndGenre(ctx, userID, genre)
 			if err != nil {
 				if err.Error() == "subscription not found" {
 					w.WriteHeader(http.StatusNotFound)

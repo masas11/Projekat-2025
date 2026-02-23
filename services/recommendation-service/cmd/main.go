@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"recommendation-service/config"
@@ -52,6 +53,68 @@ func main() {
 		w.Write([]byte("Sync completed successfully"))
 	})
 
+	// Sync subscriptions for a specific user endpoint
+	mux.HandleFunc("/sync-user-subscriptions", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		userID := r.URL.Query().Get("userId")
+		if userID == "" {
+			http.Error(w, "userId parameter is required", http.StatusBadRequest)
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		// Ensure user exists
+		if err := neo4jStore.AddOrUpdateUser(ctx, userID); err != nil {
+			log.Printf("Error adding user: %v", err)
+		}
+
+		// Get user subscriptions from subscriptions service
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Get(fmt.Sprintf("%s/subscriptions?userId=%s", cfg.SubscriptionsServiceURL, userID))
+		if err != nil {
+			log.Printf("Error fetching subscriptions for user %s: %v", userID, err)
+			http.Error(w, fmt.Sprintf("failed to fetch subscriptions: %v", err), http.StatusInternalServerError)
+			return
+		}
+		defer resp.Body.Close()
+
+		var subscriptions []map[string]interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&subscriptions); err != nil {
+			log.Printf("Error decoding subscriptions: %v", err)
+			http.Error(w, "failed to decode subscriptions", http.StatusInternalServerError)
+			return
+		}
+
+		syncedCount := 0
+		for _, sub := range subscriptions {
+			subType, _ := sub["type"].(string)
+			if subType == "genre" {
+				genre, _ := sub["genre"].(string)
+				if genre != "" {
+					if err := neo4jStore.AddSubscription(ctx, userID, genre); err != nil {
+						log.Printf("Error syncing subscription for user %s to genre %s: %v", userID, genre, err)
+					} else {
+						syncedCount++
+						log.Printf("Synced subscription: user %s -> genre %s", userID, genre)
+					}
+				}
+			}
+		}
+
+		log.Printf("Synced %d genre subscriptions for user %s", syncedCount, userID)
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"message": fmt.Sprintf("Synced %d subscriptions for user %s", syncedCount, userID),
+			"count":   syncedCount,
+		})
+	})
+
 	// Get recommendations endpoint
 	mux.HandleFunc("/recommendations", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -64,6 +127,16 @@ func main() {
 			http.Error(w, "userId parameter is required", http.StatusBadRequest)
 			return
 		}
+		
+		// Clean userId - remove any query parameters that might have been appended
+		if idx := strings.Index(userID, "?"); idx != -1 {
+			userID = userID[:idx]
+		}
+		if idx := strings.Index(userID, "&"); idx != -1 {
+			userID = userID[:idx]
+		}
+		
+		log.Printf("Cleaned userId: %s (original had query params: %v)", userID, strings.Contains(r.URL.Query().Get("userId"), "?"))
 
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
@@ -82,6 +155,11 @@ func main() {
 			return
 		}
 		log.Printf("Found %d subscribed genre songs for user %s", len(subscribedSongs), userID)
+		if len(subscribedSongs) > 0 {
+			log.Printf("First subscribed song for user %s: %s (genre: %s)", userID, subscribedSongs[0].Name, subscribedSongs[0].Genre)
+		} else {
+			log.Printf("WARNING: No subscribed genre songs found for user %s - user may not have subscriptions in Neo4j", userID)
+		}
 
 		// Get top rated song from unsubscribed genre
 		topRatedSong, err := neo4jStore.GetTopRatedSongFromUnsubscribedGenre(ctx, userID)
@@ -200,6 +278,8 @@ func handleSubscriptionCreated(ctx context.Context, event map[string]interface{}
 		return
 	}
 
+	log.Printf("Processing subscription_created event: userId=%s, genre=%s", userID, genre)
+
 	// Ensure user exists
 	if err := store.AddOrUpdateUser(ctx, userID); err != nil {
 		log.Printf("Error adding user: %v", err)
@@ -211,7 +291,18 @@ func handleSubscriptionCreated(ctx context.Context, event map[string]interface{}
 		return
 	}
 
-	log.Printf("Subscription created: user %s subscribed to genre %s", userID, genre)
+	log.Printf("Subscription created successfully: user %s subscribed to genre %s", userID, genre)
+	
+	// Verify subscription was created by checking if songs exist for this genre
+	songs, err := store.GetSubscribedGenreSongs(ctx, userID)
+	if err != nil {
+		log.Printf("Error verifying subscription: %v", err)
+	} else {
+		log.Printf("After subscription: found %d songs for user %s in genre %s", len(songs), userID, genre)
+		if len(songs) == 0 {
+			log.Printf("WARNING: No songs found for genre %s - genre may not have songs in Neo4j or genre name mismatch", genre)
+		}
+	}
 }
 
 func handleSubscriptionDeleted(ctx context.Context, event map[string]interface{}, store *store.Neo4jStore) {

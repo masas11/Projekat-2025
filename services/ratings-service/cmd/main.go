@@ -201,6 +201,56 @@ func main() {
 
 	mux := http.NewServeMux()
 
+	// emitRatingEvent sends rating event to recommendation-service asynchronously
+	emitRatingEvent := func(recommendationServiceURL, userID, songID string, rating int, eventType string) {
+		go func() {
+			event := map[string]interface{}{
+				"type":    eventType,
+				"userId":  userID,
+				"songId":  songID,
+				"rating":  rating,
+			}
+
+			eventJSON, err := json.Marshal(event)
+			if err != nil {
+				log.Printf("Failed to marshal rating event: %v", err)
+				return
+			}
+
+			url := recommendationServiceURL + "/events"
+			req, err := http.NewRequest("POST", url, bytes.NewBuffer(eventJSON))
+			if err != nil {
+				log.Printf("Failed to create rating event request: %v", err)
+				return
+			}
+
+			req.Header.Set("Content-Type", "application/json")
+
+			tr := &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			}
+			client := &http.Client{
+				Timeout:   5 * time.Second,
+				Transport: tr,
+			}
+
+			log.Printf("Sending rating event to %s: type=%s, userId=%s, songId=%s, rating=%d", url, eventType, userID, songID, rating)
+			resp, err := client.Do(req)
+			if err != nil {
+				log.Printf("Failed to emit rating event to recommendation-service: %v", err)
+				return
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
+				log.Printf("Recommendation-service returned non-OK status for rating event: %d", resp.StatusCode)
+				return
+			}
+
+			log.Printf("Rating event emitted successfully: %s", eventType)
+		}()
+	}
+
 	// Health check
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		// Add CORS headers
@@ -505,51 +555,6 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(response)
 	})
-
-	// emitRatingEvent sends rating event to recommendation-service asynchronously
-	emitRatingEvent := func(recommendationServiceURL, userID, songID string, rating int, eventType string) {
-		go func() {
-			event := map[string]interface{}{
-				"type":    eventType,
-				"userId":  userID,
-				"songId":  songID,
-				"rating":  rating,
-			}
-
-			eventJSON, err := json.Marshal(event)
-			if err != nil {
-				log.Printf("Failed to marshal rating event: %v", err)
-				return
-			}
-
-			url := recommendationServiceURL + "/events"
-			req, err := http.NewRequest("POST", url, bytes.NewBuffer(eventJSON))
-			if err != nil {
-				log.Printf("Failed to create rating event request: %v", err)
-				return
-			}
-
-			req.Header.Set("Content-Type", "application/json")
-
-			client := &http.Client{
-				Timeout: 2 * time.Second,
-			}
-
-			resp, err := client.Do(req)
-			if err != nil {
-				log.Printf("Failed to emit rating event to recommendation-service: %v", err)
-				return
-			}
-			defer resp.Body.Close()
-
-			if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
-				log.Printf("Recommendation-service returned non-OK status for rating event: %d", resp.StatusCode)
-				return
-			}
-
-			log.Printf("Rating event emitted successfully: %s", eventType)
-		}()
-	}
 
 	log.Println("Ratings service running on port", cfg.Port)
 	

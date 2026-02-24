@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"io"
@@ -30,7 +31,7 @@ func enableCORS(w http.ResponseWriter, r *http.Request) {
 }
 
 // proxyRequest prosleđuje zahtev ka backend servisu
-func proxyRequest(w http.ResponseWriter, r *http.Request, targetURL string, log *logger.Logger) {
+func proxyRequest(w http.ResponseWriter, r *http.Request, targetURL string, appLogger *logger.Logger) {
 	// Dodaj CORS headers
 	enableCORS(w, r)
 
@@ -54,8 +55,19 @@ func proxyRequest(w http.ResponseWriter, r *http.Request, targetURL string, log 
 	}
 	defer r.Body.Close()
 
-	// Kreiranje novog zahteva ka backend servisu
-	req, err := http.NewRequest(r.Method, targetURL, bytes.NewBuffer(body))
+	// Eksplicitno postavljen timeout za vraćanje odgovora korisniku (2.7.6)
+	// Koristimo request context tako da se može otkazati
+	// Povećan timeout za notifications-service zbog Cassandra inicijalizacije
+	timeout := 5 * time.Second
+	if strings.Contains(targetURL, "notifications-service") {
+		timeout = 15 * time.Second
+	}
+	
+	ctx, cancel := context.WithTimeout(r.Context(), timeout)
+	defer cancel()
+
+	// Kreiranje novog zahteva ka backend servisu sa context-om
+	req, err := http.NewRequestWithContext(ctx, r.Method, targetURL, bytes.NewBuffer(body))
 	if err != nil {
 		// CORS headers već postavljeni na početku funkcije
 		http.Error(w, "Failed to create request", http.StatusInternalServerError)
@@ -80,25 +92,49 @@ func proxyRequest(w http.ResponseWriter, r *http.Request, targetURL string, log 
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
 	
-	// Povećan timeout za notifications-service zbog Cassandra inicijalizacije
-	timeout := 5 * time.Second
-	if strings.Contains(targetURL, "notifications-service") {
-		timeout = 15 * time.Second
-	}
-	
+	// Client timeout mora biti veći od context timeout-a da bi context imao prioritet
+	clientTimeout := timeout + 1*time.Second
 	client := &http.Client{
-		Timeout:   timeout,
+		Timeout:   clientTimeout,
 		Transport: tr,
 	}
-	resp, err := client.Do(req)
+	
+	// Kanal za rezultat zahteva
+	type result struct {
+		resp *http.Response
+		err  error
+	}
+	resultChan := make(chan result, 1)
+	
+	// Pokreni zahtev u gorutini
+	go func() {
+		resp, err := client.Do(req)
+		resultChan <- result{resp: resp, err: err}
+	}()
+	
+	// Čekaj na rezultat ili timeout
+	var resp *http.Response
+	select {
+	case <-ctx.Done():
+		// Timeout istekao - vraćamo odgovor korisniku (2.7.6)
+		log.Printf("Request timeout for %s: %v", targetURL, ctx.Err())
+		enableCORS(w, r)
+		w.WriteHeader(http.StatusRequestTimeout)
+		w.Write([]byte("Request timeout - service did not respond in time"))
+		return
+	case res := <-resultChan:
+		resp = res.resp
+		err = res.err
+	}
+	
 	if err != nil {
 		// Log TLS/connection errors
-		if log != nil {
+		if appLogger != nil {
 			errorMsg := err.Error()
 			if strings.Contains(errorMsg, "tls") || strings.Contains(errorMsg, "TLS") ||
 				strings.Contains(errorMsg, "certificate") || strings.Contains(errorMsg, "handshake") {
 				serviceName := extractServiceName(targetURL)
-				log.LogTLSFailure(serviceName, errorMsg, r.RemoteAddr)
+				appLogger.LogTLSFailure(serviceName, errorMsg, r.RemoteAddr)
 			}
 		}
 		// CORS headers već postavljeni na početku funkcije

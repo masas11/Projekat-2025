@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -12,13 +14,12 @@ import (
 	"sync"
 	"time"
 
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+
 	"ratings-service/config"
 	"ratings-service/internal/model"
 	"ratings-service/internal/store"
-
-	"bytes"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // Simple Circuit Breaker implementation
@@ -95,41 +96,121 @@ func checkSongExists(client *http.Client, contentURL string) bool {
 	return true
 }
 
-// Check if specific song exists by ID with retry and fallback (2.7.2, 2.7.3)
+// RetryConfig holds configuration for retry mechanism (2.7.5)
+type RetryConfig struct {
+	MaxRetries      int
+	InitialDelay    time.Duration
+	MaxDelay        time.Duration
+	BackoffMultiplier float64
+}
+
+// DefaultRetryConfig returns default retry configuration (2.7.5)
+func DefaultRetryConfig() RetryConfig {
+	return RetryConfig{
+		MaxRetries:       3,
+		InitialDelay:    100 * time.Millisecond,
+		MaxDelay:         2 * time.Second,
+		BackoffMultiplier: 2.0,
+	}
+}
+
+// RetryWithExponentialBackoff executes a function with retry and exponential backoff (2.7.5)
+func RetryWithExponentialBackoff(ctx context.Context, config RetryConfig, fn func() error) error {
+	delay := config.InitialDelay
+	
+	for attempt := 0; attempt < config.MaxRetries; attempt++ {
+		// Check if context is cancelled (2.7.7)
+		select {
+		case <-ctx.Done():
+			log.Printf("Context cancelled during retry attempt %d: %v", attempt+1, ctx.Err())
+			return ctx.Err()
+		default:
+		}
+		
+		err := fn()
+		if err == nil {
+			if attempt > 0 {
+				log.Printf("Retry succeeded on attempt %d", attempt+1)
+			}
+			return nil
+		}
+		
+		// Don't retry on last attempt
+		if attempt < config.MaxRetries-1 {
+			log.Printf("Retry attempt %d/%d failed: %v, retrying in %v...", attempt+1, config.MaxRetries, err, delay)
+			select {
+			case <-ctx.Done():
+				log.Printf("Context cancelled during retry delay: %v", ctx.Err())
+				return ctx.Err()
+			case <-time.After(delay):
+				// Exponential backoff
+				delay = time.Duration(float64(delay) * config.BackoffMultiplier)
+				if delay > config.MaxDelay {
+					delay = config.MaxDelay
+				}
+			}
+		}
+	}
+	
+	return fmt.Errorf("all %d retry attempts failed", config.MaxRetries)
+}
+
+// Check if specific song exists by ID with retry and fallback (2.7.2, 2.7.3, 2.7.5)
 func checkSpecificSongExists(client *http.Client, contentURL, songID string) bool {
 	checkURL := contentURL + "/songs/exists?id=" + url.QueryEscape(songID)
+	retryConfig := DefaultRetryConfig()
+	
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
-	// Retry logic with timeout (2.7.2)
-	for i := 0; i < 2; i++ { // retry 2 times
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		req, err := http.NewRequestWithContext(ctx, "GET", checkURL, nil)
+	var exists bool
+	var lastErr error
+	
+	err := RetryWithExponentialBackoff(ctx, retryConfig, func() error {
+		// Check if context is cancelled (2.7.7)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		
+		reqCtx, reqCancel := context.WithTimeout(ctx, 2*time.Second)
+		defer reqCancel()
+		
+		req, err := http.NewRequestWithContext(reqCtx, "GET", checkURL, nil)
 		if err != nil {
-			cancel()
-			log.Printf("Error creating request for song %s: %v", songID, err)
-			continue
+			lastErr = err
+			return err
 		}
 
 		resp, err := client.Do(req)
-		cancel()
+		if err != nil {
+			lastErr = err
+			return err
+		}
+		defer resp.Body.Close()
 
-		if err == nil && resp.StatusCode == http.StatusOK {
+		if resp.StatusCode == http.StatusOK {
 			var result map[string]bool
 			if err := json.NewDecoder(resp.Body).Decode(&result); err == nil {
-				resp.Body.Close()
-				return result["exists"]
+				exists = result["exists"]
+				return nil // Success
 			}
-			resp.Body.Close()
+			lastErr = fmt.Errorf("failed to decode response: %v", err)
+			return lastErr
 		}
 		
-		if i < 1 { // Don't sleep on last attempt
-			log.Printf("Retrying call to content-service for song %s... (attempt %d)", songID, i+1)
-			time.Sleep(100 * time.Millisecond) // brief delay between retries
-		}
+		lastErr = fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		return lastErr
+	})
+
+	if err != nil {
+		// Fallback logic (2.7.3): return false when service is unavailable
+		log.Printf("Content-service unavailable for song %s after retries, fallback activated - assuming song does not exist. Last error: %v", songID, lastErr)
+		return false
 	}
 
-	// Fallback logic (2.7.3): return false when service is unavailable
-	log.Printf("Content-service unavailable for song %s, fallback activated - assuming song does not exist", songID)
-	return false
+	return exists
 }
 
 func main() {
@@ -324,6 +405,21 @@ func main() {
 			return
 		}
 
+		// Create context with timeout from request context (2.7.6, 2.7.7)
+		// Use request context so it can be cancelled by API Gateway timeout
+		ratingCtx, ratingCancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer ratingCancel()
+
+		// Check if context is already cancelled (2.7.7)
+		select {
+		case <-ratingCtx.Done():
+			log.Printf("Request context cancelled before processing: %v", ratingCtx.Err())
+			w.WriteHeader(http.StatusRequestTimeout)
+			w.Write([]byte("Request timeout - processing abandoned"))
+			return
+		default:
+		}
+
 		// Use circuit breaker for synchronous call to check if song exists
 		err = cb.Call(func() error {
 			if !checkSpecificSongExists(clientHTTP, cfg.ContentServiceURL, songID) {
@@ -333,6 +429,16 @@ func main() {
 		})
 
 		if err != nil {
+			// Check if context was cancelled during circuit breaker call (2.7.7)
+			select {
+			case <-ratingCtx.Done():
+				log.Printf("Request context cancelled during circuit breaker call: %v", ratingCtx.Err())
+				w.WriteHeader(http.StatusRequestTimeout)
+				w.Write([]byte("Request timeout - processing abandoned"))
+				return
+			default:
+			}
+
 			if cbErr, ok := err.(*CircuitBreakerError); ok {
 				if cbErr.Message == "Song not found" {
 					w.WriteHeader(http.StatusNotFound)
@@ -350,6 +456,16 @@ func main() {
 			return
 		}
 
+		// Check if context is cancelled before database operations (2.7.7)
+		select {
+		case <-ratingCtx.Done():
+			log.Printf("Request context cancelled before database operations: %v", ratingCtx.Err())
+			w.WriteHeader(http.StatusRequestTimeout)
+			w.Write([]byte("Request timeout - processing abandoned"))
+			return
+		default:
+		}
+
 		// Save rating to database
 		ratingModel := &model.Rating{
 			SongID: songID,
@@ -358,15 +474,32 @@ func main() {
 		}
 
 		// Check if user already rated this song
-		ratingCtx, ratingCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer ratingCancel()
 
 		existingRating, err := ratingStore.GetBySongAndUser(ratingCtx, songID, userID)
 		if err != nil {
+			// Check if context was cancelled (2.7.7)
+			select {
+			case <-ratingCtx.Done():
+				log.Printf("Request context cancelled during database read: %v", ratingCtx.Err())
+				w.WriteHeader(http.StatusRequestTimeout)
+				w.Write([]byte("Request timeout - processing abandoned"))
+				return
+			default:
+			}
 			log.Printf("Error checking existing rating: %v", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte("Error checking existing rating"))
 			return
+		}
+
+		// Check if context is cancelled before update/create (2.7.7)
+		select {
+		case <-ratingCtx.Done():
+			log.Printf("Request context cancelled before rating save: %v", ratingCtx.Err())
+			w.WriteHeader(http.StatusRequestTimeout)
+			w.Write([]byte("Request timeout - processing abandoned"))
+			return
+		default:
 		}
 
 		if existingRating != nil {
@@ -374,6 +507,15 @@ func main() {
 			ratingModel.ID = existingRating.ID
 			err = ratingStore.Update(ratingCtx, ratingModel)
 			if err != nil {
+				// Check if context was cancelled (2.7.7)
+				select {
+				case <-ratingCtx.Done():
+					log.Printf("Request context cancelled during rating update: %v", ratingCtx.Err())
+					w.WriteHeader(http.StatusRequestTimeout)
+					w.Write([]byte("Request timeout - processing abandoned"))
+					return
+				default:
+				}
 				log.Printf("Error updating rating: %v", err)
 				w.WriteHeader(http.StatusInternalServerError)
 				w.Write([]byte("Error updating rating"))
@@ -386,6 +528,15 @@ func main() {
 			// Create new rating
 			err = ratingStore.Create(ratingCtx, ratingModel)
 			if err != nil {
+				// Check if context was cancelled (2.7.7)
+				select {
+				case <-ratingCtx.Done():
+					log.Printf("Request context cancelled during rating create: %v", ratingCtx.Err())
+					w.WriteHeader(http.StatusRequestTimeout)
+					w.Write([]byte("Request timeout - processing abandoned"))
+					return
+				default:
+				}
 				log.Printf("Error creating rating: %v", err)
 				w.WriteHeader(http.StatusInternalServerError)
 				w.Write([]byte("Error creating rating"))

@@ -80,39 +80,114 @@ func (e *CircuitBreakerError) Error() string {
 	return e.Message
 }
 
-// Check if artist exists by ID with circuit breaker and fallback
-func checkArtistExists(client *http.Client, contentURL, artistID string, cb *CircuitBreaker) bool {
+// RetryConfig holds configuration for retry mechanism (2.7.5)
+type RetryConfig struct {
+	MaxRetries      int
+	InitialDelay    time.Duration
+	MaxDelay        time.Duration
+	BackoffMultiplier float64
+}
+
+// DefaultRetryConfig returns default retry configuration (2.7.5)
+func DefaultRetryConfig() RetryConfig {
+	return RetryConfig{
+		MaxRetries:       3,
+		InitialDelay:    100 * time.Millisecond,
+		MaxDelay:         2 * time.Second,
+		BackoffMultiplier: 2.0,
+	}
+}
+
+// RetryWithExponentialBackoff executes a function with retry and exponential backoff (2.7.5)
+func RetryWithExponentialBackoff(ctx context.Context, config RetryConfig, fn func() error) error {
+	delay := config.InitialDelay
+	
+	for attempt := 0; attempt < config.MaxRetries; attempt++ {
+		// Check if context is cancelled (2.7.7)
+		select {
+		case <-ctx.Done():
+			log.Printf("Context cancelled during retry attempt %d: %v", attempt+1, ctx.Err())
+			return ctx.Err()
+		default:
+		}
+		
+		err := fn()
+		if err == nil {
+			if attempt > 0 {
+				log.Printf("Retry succeeded on attempt %d", attempt+1)
+			}
+			return nil
+		}
+		
+		// Don't retry on last attempt
+		if attempt < config.MaxRetries-1 {
+			log.Printf("Retry attempt %d/%d failed: %v, retrying in %v...", attempt+1, config.MaxRetries, err, delay)
+			select {
+			case <-ctx.Done():
+				log.Printf("Context cancelled during retry delay: %v", ctx.Err())
+				return ctx.Err()
+			case <-time.After(delay):
+				// Exponential backoff
+				delay = time.Duration(float64(delay) * config.BackoffMultiplier)
+				if delay > config.MaxDelay {
+					delay = config.MaxDelay
+				}
+			}
+		}
+	}
+	
+	return fmt.Errorf("all %d retry attempts failed", config.MaxRetries)
+}
+
+// Check if artist exists by ID with circuit breaker, retry and fallback (2.7.5)
+func checkArtistExists(client *http.Client, contentURL, artistID string, cb *CircuitBreaker, ctx context.Context) bool {
 	checkURL := contentURL + "/artists/" + url.QueryEscape(artistID)
+	retryConfig := DefaultRetryConfig()
 
 	// Use circuit breaker for the call
 	var exists bool
-	var callErr error
+	var lastErr error
 
 	err := cb.Call(func() error {
-		// Retry logic with timeout
-		for i := 0; i < 2; i++ { // retry 2 times
-			resp, err := client.Get(checkURL)
-			if err == nil {
-				resp.Body.Close()
-				if resp.StatusCode == http.StatusOK {
-					exists = true
-					return nil
-				}
+		return RetryWithExponentialBackoff(ctx, retryConfig, func() error {
+			// Check if context is cancelled (2.7.7)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
 			}
-			if i < 1 { // Don't sleep on last attempt
-				log.Printf("Retrying call to content-service for artist %s... (attempt %d)", artistID, i+1)
-				time.Sleep(100 * time.Millisecond)
+			
+			reqCtx, reqCancel := context.WithTimeout(ctx, 2*time.Second)
+			defer reqCancel()
+			
+			req, err := http.NewRequestWithContext(reqCtx, "GET", checkURL, nil)
+			if err != nil {
+				lastErr = err
+				return err
 			}
-		}
-		callErr = fmt.Errorf("failed to verify artist existence")
-		return callErr
+			
+			resp, err := client.Do(req)
+			if err != nil {
+				lastErr = err
+				return err
+			}
+			defer resp.Body.Close()
+			
+			if resp.StatusCode == http.StatusOK {
+				exists = true
+				return nil // Success
+			}
+			
+			lastErr = fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+			return lastErr
+		})
 	})
 
 	if err != nil {
 		if _, ok := err.(*CircuitBreakerError); ok {
 			log.Printf("Circuit breaker open for artist %s, using fallback", artistID)
 		} else {
-			log.Printf("Error checking artist %s: %v, using fallback", artistID, err)
+			log.Printf("Error checking artist %s: %v, using fallback. Last error: %v", artistID, err, lastErr)
 		}
 		// Fallback logic: return false (artist not found) when service is unavailable
 		return false
@@ -516,11 +591,31 @@ func main() {
 			return
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		// Use request context so it can be cancelled by API Gateway timeout (2.7.6, 2.7.7)
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
+
+		// Check if context is already cancelled (2.7.7)
+		select {
+		case <-ctx.Done():
+			log.Printf("Request context cancelled before processing: %v", ctx.Err())
+			w.WriteHeader(http.StatusRequestTimeout)
+			w.Write([]byte("Request timeout - processing abandoned"))
+			return
+		default:
+		}
 
 		subscriptions, err := subscriptionRepo.GetByUserID(ctx, userID)
 		if err != nil {
+			// Check if context was cancelled (2.7.7)
+			select {
+			case <-ctx.Done():
+				log.Printf("Request context cancelled during database read: %v", ctx.Err())
+				w.WriteHeader(http.StatusRequestTimeout)
+				w.Write([]byte("Request timeout - processing abandoned"))
+				return
+			default:
+			}
 			log.Printf("Error getting subscriptions: %v", err)
 			http.Error(w, "failed to get subscriptions", http.StatusInternalServerError)
 			return
@@ -552,12 +647,31 @@ func main() {
 				return
 			}
 
-			// Check if already subscribed
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			// Use request context so it can be cancelled by API Gateway timeout (2.7.6, 2.7.7)
+			ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 			defer cancel()
+
+			// Check if context is already cancelled (2.7.7)
+			select {
+			case <-ctx.Done():
+				log.Printf("Request context cancelled before processing: %v", ctx.Err())
+				w.WriteHeader(http.StatusRequestTimeout)
+				w.Write([]byte("Request timeout - processing abandoned"))
+				return
+			default:
+			}
 
 			existing, err := subscriptionRepo.GetByUserAndArtist(ctx, userID, artistID)
 			if err != nil {
+				// Check if context was cancelled (2.7.7)
+				select {
+				case <-ctx.Done():
+					log.Printf("Request context cancelled during subscription check: %v", ctx.Err())
+					w.WriteHeader(http.StatusRequestTimeout)
+					w.Write([]byte("Request timeout - processing abandoned"))
+					return
+				default:
+				}
 				log.Printf("Error checking subscription: %v", err)
 				http.Error(w, "failed to check subscription", http.StatusInternalServerError)
 				return
@@ -568,12 +682,41 @@ func main() {
 				return
 			}
 
-			// Synchronous call to check if artist exists with circuit breaker (2.5, 2.7.4)
-			exists := checkArtistExists(client, cfg.ContentServiceURL, artistID, contentServiceCB)
+			// Check if context is cancelled before external call (2.7.7)
+			select {
+			case <-ctx.Done():
+				log.Printf("Request context cancelled before artist check: %v", ctx.Err())
+				w.WriteHeader(http.StatusRequestTimeout)
+				w.Write([]byte("Request timeout - processing abandoned"))
+				return
+			default:
+			}
+
+			// Synchronous call to check if artist exists with circuit breaker and retry (2.5, 2.7.4, 2.7.5)
+			exists := checkArtistExists(client, cfg.ContentServiceURL, artistID, contentServiceCB, ctx)
 			if !exists {
+				// Check if context was cancelled during artist check (2.7.7)
+				select {
+				case <-ctx.Done():
+					log.Printf("Request context cancelled during artist check: %v", ctx.Err())
+					w.WriteHeader(http.StatusRequestTimeout)
+					w.Write([]byte("Request timeout - processing abandoned"))
+					return
+				default:
+				}
 				w.WriteHeader(http.StatusNotFound)
 				w.Write([]byte("Artist not found"))
 				return
+			}
+
+			// Check if context is cancelled before creating subscription (2.7.7)
+			select {
+			case <-ctx.Done():
+				log.Printf("Request context cancelled before subscription create: %v", ctx.Err())
+				w.WriteHeader(http.StatusRequestTimeout)
+				w.Write([]byte("Request timeout - processing abandoned"))
+				return
+			default:
 			}
 
 			// Create subscription
@@ -585,6 +728,15 @@ func main() {
 
 			err = subscriptionRepo.Create(ctx, subscription)
 			if err != nil {
+				// Check if context was cancelled (2.7.7)
+				select {
+				case <-ctx.Done():
+					log.Printf("Request context cancelled during subscription create: %v", ctx.Err())
+					w.WriteHeader(http.StatusRequestTimeout)
+					w.Write([]byte("Request timeout - processing abandoned"))
+					return
+				default:
+				}
 				if err.Error() == "subscription already exists" {
 					w.WriteHeader(http.StatusConflict)
 					w.Write([]byte("Already subscribed to this artist"))

@@ -14,8 +14,14 @@
 
 **Provera logova (PowerShell):**
 ```powershell
-docker-compose logs subscriptions-service --tail 20 | Select-String -Pattern "event|notification" -CaseSensitive:$false
-docker-compose logs recommendation-service --tail 20 | Select-String -Pattern "song_created|event|rating" -CaseSensitive:$false
+# Proveri da li content-service emituje event-e
+docker-compose logs content-service --tail 20 | Select-String -Pattern "Event emitted" -CaseSensitive:$false
+
+# Proveri da li subscriptions-service prima event-e
+docker-compose logs subscriptions-service --tail 20 | Select-String -Pattern "Received event|event" -CaseSensitive:$false
+
+# Proveri da li recommendation-service prima event-e
+docker-compose logs recommendation-service --tail 20 | Select-String -Pattern "Received event|event" -CaseSensitive:$false
 ```
 
 ### Test ocenjivanja → Neo4j

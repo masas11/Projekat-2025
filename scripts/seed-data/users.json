@@ -1,0 +1,126 @@
+﻿[{
+	"_id": "5a2c3ae8-eafc-4e27-9013-a6a0d700e867",
+	"firstName": "Admin",
+	"lastName": "User",
+	"email": "admin@musicstreaming.com",
+	"username": "admin",
+	"passwordHash": "$2a$10$9sD1IqnfP7bOTdBOmL6.B.VKzwtX6vlvDQsb3CInlskkxtUfioKUy",
+	"role": "ADMIN",
+	"verified": true,
+	"passwordChangedAt": {
+		"$date": "2026-02-23T13:47:08.983Z"
+	},
+	"passwordExpiresAt": {
+		"$date": "2026-04-24T13:47:08.983Z"
+	},
+	"failedLoginAttempts": 0,
+	"lockedUntil": {
+		"$date": {
+			"$numberLong": "-62135596800000"
+		}
+	},
+	"createdAt": {
+		"$date": "2026-02-23T13:47:08.983Z"
+	}
+},
+{
+	"_id": "b99a83e2-5550-4849-ae0f-77a5697eeb61",
+	"firstName": "Ana",
+	"lastName": "Milkovic",
+	"email": "ana@gmail.com",
+	"username": "ana",
+	"passwordHash": "$2a$10$QTYcE7OKiM/aZRFmy5YWsu9ihItfK1.FnpfZeihyuDthbqzjoiq0i",
+	"role": "USER",
+	"verified": true,
+	"passwordChangedAt": {
+		"$date": "2026-02-23T13:56:12.933Z"
+	},
+	"passwordExpiresAt": {
+		"$date": "2026-04-24T13:56:12.933Z"
+	},
+	"failedLoginAttempts": 0,
+	"lockedUntil": {
+		"$date": {
+			"$numberLong": "-62135596800000"
+		}
+	},
+	"createdAt": {
+		"$date": "2026-02-23T13:56:12.933Z"
+	}
+},
+{
+	"_id": "a0cfeaa6-6a37-44bb-a794-9ab0678a1214",
+	"firstName": "Uros",
+	"lastName": "Milkovic",
+	"email": "uros@gmail.com",
+	"username": "uros",
+	"passwordHash": "$2a$10$kihB4U7APUndBiAGtsu3RegDtNkPiaJgDn1nezO07s4FEyKkyyzT6",
+	"role": "USER",
+	"verified": true,
+	"passwordChangedAt": {
+		"$date": "2026-02-23T15:28:42.608Z"
+	},
+	"passwordExpiresAt": {
+		"$date": "2026-04-24T15:28:42.608Z"
+	},
+	"failedLoginAttempts": 0,
+	"lockedUntil": {
+		"$date": {
+			"$numberLong": "-62135596800000"
+		}
+	},
+	"createdAt": {
+		"$date": "2026-02-23T15:28:42.608Z"
+	}
+},
+{
+	"_id": "e38d09ed-6233-43b2-b346-72da79c538e0",
+	"firstName": "Ivana",
+	"lastName": "Ilic",
+	"email": "ivana@gmail.com",
+	"username": "ivana",
+	"passwordHash": "$2a$10$Xn1J9CqRPIdTHd0UicXtn.k4BU57tAF8Pur47UWVLuwltsTcyOSkO",
+	"role": "USER",
+	"verified": true,
+	"passwordChangedAt": {
+		"$date": "2026-02-23T17:11:34.373Z"
+	},
+	"passwordExpiresAt": {
+		"$date": "2026-04-24T17:11:34.373Z"
+	},
+	"failedLoginAttempts": 0,
+	"lockedUntil": {
+		"$date": {
+			"$numberLong": "-62135596800000"
+		}
+	},
+	"createdAt": {
+		"$date": "2026-02-23T17:11:34.373Z"
+	}
+},
+{
+	"_id": "02a91647-cb94-4279-956e-9cbcc76c9b73",
+	"firstName": "Aca",
+	"lastName": "Acin",
+	"email": "aca@gmail.com",
+	"username": "aca",
+	"passwordHash": "$2a$10$EaLKNAOpRnszoGRpRy/MbuVmiytCdCkefET4NYafqI.dSxx.m.Tsi",
+	"role": "USER",
+	"verified": true,
+	"passwordChangedAt": {
+		"$date": "2026-02-23T18:05:05.792Z"
+	},
+	"passwordExpiresAt": {
+		"$date": "2026-04-24T18:05:05.792Z"
+	},
+	"failedLoginAttempts": 0,
+	"lockedUntil": {
+		"$date": {
+			"$numberLong": "-62135596800000"
+		}
+	},
+	"createdAt": {
+		"$date": "2026-02-23T18:05:05.792Z"
+	}
+}]
+

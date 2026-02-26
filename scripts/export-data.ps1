@@ -64,6 +64,13 @@ if ($LASTEXITCODE -eq 0) {
     Write-Host "   [OK] Subscriptions eksportovani" -ForegroundColor Green
 }
 
+# Eksport Users baze (bez password hash-ova za bezbednost)
+Write-Host "6. Eksport Users..." -ForegroundColor Cyan
+docker exec $usersContainer mongoexport --db=users_db --collection=users --jsonArray --pretty | Out-File -FilePath "$exportDir\users.json" -Encoding UTF8
+if ($LASTEXITCODE -eq 0) {
+    Write-Host "   [OK] Users eksportovani" -ForegroundColor Green
+}
+
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Green
 Write-Host "  EKSPORT ZAVRSEN!" -ForegroundColor Green
@@ -75,6 +82,7 @@ Write-Host "  - $exportDir\albums.json" -ForegroundColor White
 Write-Host "  - $exportDir\songs.json" -ForegroundColor White
 Write-Host "  - $exportDir\ratings.json" -ForegroundColor White
 Write-Host "  - $exportDir\subscriptions.json" -ForegroundColor White
+Write-Host "  - $exportDir\users.json" -ForegroundColor White
 Write-Host ""
 Write-Host "Sledeci koraci:" -ForegroundColor Yellow
 Write-Host "  1. Proverite eksportovane fajlove" -ForegroundColor White

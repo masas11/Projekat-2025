@@ -10,6 +10,7 @@ Write-Host ""
 $contentContainer = docker ps --filter "name=mongodb-content" --format "{{.Names}}" | Select-Object -First 1
 $ratingsContainer = docker ps --filter "name=mongodb-ratings" --format "{{.Names}}" | Select-Object -First 1
 $subscriptionsContainer = docker ps --filter "name=mongodb-subscriptions" --format "{{.Names}}" | Select-Object -First 1
+$usersContainer = docker ps --filter "name=mongodb-users" --format "{{.Names}}" | Select-Object -First 1
 
 if ([string]::IsNullOrEmpty($contentContainer)) {
     Write-Host "ERROR: MongoDB kontejneri nisu pokrenuti!" -ForegroundColor Red
@@ -82,15 +83,26 @@ if (Test-Path "$exportDir\subscriptions.json") {
     Write-Host "5. Import Subscriptions..." -ForegroundColor Cyan
     Get-Content "$exportDir\subscriptions.json" | docker exec -i $subscriptionsContainer mongoimport --db=subscriptions_db --collection=subscriptions --jsonArray --drop
     if ($LASTEXITCODE -eq 0) {
-        Write-Host "   ✓ Subscriptions importovani" -ForegroundColor Green
+        Write-Host "   [OK] Subscriptions importovani" -ForegroundColor Green
     }
 } else {
-    Write-Host "   ⚠ subscriptions.json ne postoji, preskačem..." -ForegroundColor Yellow
+    Write-Host "   [WARN] subscriptions.json ne postoji, preskačem..." -ForegroundColor Yellow
+}
+
+# Import Users
+if (Test-Path "$exportDir\users.json") {
+    Write-Host "6. Import Users..." -ForegroundColor Cyan
+    Get-Content "$exportDir\users.json" | docker exec -i $usersContainer mongoimport --db=users_db --collection=users --jsonArray --drop
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "   [OK] Users importovani" -ForegroundColor Green
+    }
+} else {
+    Write-Host "   [WARN] users.json ne postoji, preskačem..." -ForegroundColor Yellow
 }
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Green
-Write-Host "  IMPORT ZAVRŠEN!" -ForegroundColor Green
+Write-Host "  IMPORT ZAVRSEN!" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "Napomena: Ako JSON fajlovi ne postoje, koristite:" -ForegroundColor Yellow

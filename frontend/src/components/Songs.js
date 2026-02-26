@@ -192,6 +192,7 @@ const Songs = () => {
   };
 
   const handleEdit = (song) => {
+    console.log('handleEdit called for song:', song);
     setEditingSong(song);
     setFormData({
       name: song.name,
@@ -203,6 +204,15 @@ const Songs = () => {
     });
     setAudioFile(null);
     setShowForm(true);
+    // Scroll to form after state update
+    setTimeout(() => {
+      const formElement = document.querySelector('[data-song-form]');
+      if (formElement) {
+        formElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } else {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    }, 100);
   };
 
   const handleCancel = () => {
@@ -357,7 +367,9 @@ const Songs = () => {
 
           {/* Add/Edit Form */}
           {showForm && isAdmin() && (
-            <div style={{
+            <div 
+              data-song-form
+              style={{
               marginTop: '30px',
               padding: '30px',
               background: 'linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%)',
@@ -813,13 +825,16 @@ const Songs = () => {
                         className="btn btn-secondary"
                         onClick={(e) => {
                           e.stopPropagation();
+                          e.preventDefault();
+                          console.log('Edit button clicked for song:', song.id);
                           handleEdit(song);
                         }}
                         style={{
                           flex: 1,
                           padding: '10px 16px',
                           fontSize: '14px',
-                          fontWeight: '500'
+                          fontWeight: '500',
+                          cursor: 'pointer'
                         }}
                       >
                         ✏️ Izmeni

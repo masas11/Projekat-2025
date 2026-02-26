@@ -1,13 +1,4 @@
 ﻿[{
-	"_id": "18768f27-3d6b-453e-aa3e-432ade23fe81",
-	"userId": "b99a83e2-5550-4849-ae0f-77a5697eeb61",
-	"type": "artist",
-	"artistId": "artist4",
-	"createdAt": {
-		"$date": "2026-02-23T13:57:29.127Z"
-	}
-},
-{
 	"_id": "1d52469e-c4f0-4092-9ec1-7e77fe255cc6",
 	"userId": "b99a83e2-5550-4849-ae0f-77a5697eeb61",
 	"type": "genre",
@@ -50,6 +41,26 @@
 	"genre": "Rock",
 	"createdAt": {
 		"$date": "2026-02-23T20:59:48.808Z"
+	}
+},
+{
+	"_id": "5766d3e5-451d-444d-b15f-416389904c07",
+	"userId": "b99a83e2-5550-4849-ae0f-77a5697eeb61",
+	"type": "artist",
+	"artistId": "artist4",
+	"createdAt": {
+		"$date": "2026-02-26T19:57:03.481Z"
+	},
+	"artistName": "The Weeknd"
+},
+{
+	"_id": "fe00f487-1bd0-46d4-9838-9b74ac90b579",
+	"userId": "b99a83e2-5550-4849-ae0f-77a5697eeb61",
+	"type": "artist",
+	"artistId": "artist3",
+	"artistName": "Lady Gaga",
+	"createdAt": {
+		"$date": "2026-02-26T20:15:13.168Z"
 	}
 }]
 

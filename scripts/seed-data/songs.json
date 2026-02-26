@@ -268,5 +268,73 @@
 	"updatedAt": {
 		"$date": "2026-02-23T22:18:16.653Z"
 	}
+},
+{
+	"_id": "5a7b1c6b-3062-4770-85a6-ebe49bb9e5f3",
+	"name": "djkwej",
+	"duration": 333,
+	"genre": "Reggae",
+	"albumId": "album2",
+	"artistIds": [
+		"artist2"
+	],
+	"createdAt": {
+		"$date": "2026-02-26T22:30:47.851Z"
+	},
+	"updatedAt": {
+		"$date": "2026-02-26T22:30:52.775Z"
+	},
+	"audioFileUrl": "/audio/songs/5a7b1c6b-3062-4770-85a6-ebe49bb9e5f3.mp3"
+},
+{
+	"_id": "35dd93f9-b30c-479f-8ff4-4514b975050d",
+	"name": "Da zive ko mi",
+	"duration": 220,
+	"genre": "Reggae",
+	"albumId": "album4",
+	"artistIds": [
+		"artist4"
+	],
+	"createdAt": {
+		"$date": "2026-02-26T22:44:01.858Z"
+	},
+	"updatedAt": {
+		"$date": "2026-02-26T22:44:02.981Z"
+	},
+	"audioFileUrl": "/audio/songs/35dd93f9-b30c-479f-8ff4-4514b975050d.mp3"
+},
+{
+	"_id": "154c22f4-4e0a-4b2a-b843-407fea812122",
+	"name": "Napumpam i cao",
+	"duration": 170,
+	"genre": "Metal",
+	"albumId": "album2",
+	"artistIds": [
+		"artist2"
+	],
+	"createdAt": {
+		"$date": "2026-02-26T22:46:24.918Z"
+	},
+	"updatedAt": {
+		"$date": "2026-02-26T22:46:25.46Z"
+	},
+	"audioFileUrl": "/audio/songs/154c22f4-4e0a-4b2a-b843-407fea812122.mp3"
+},
+{
+	"_id": "83675980-c426-4b7a-8593-ff724dca6b01",
+	"name": "Wicked game",
+	"duration": 340,
+	"genre": "Blues",
+	"albumId": "e06ea550-2abf-408e-884e-3badd418067f",
+	"artistIds": [
+		"ef400ca3-04e9-48c5-b902-791b5489de01"
+	],
+	"createdAt": {
+		"$date": "2026-02-26T22:48:30.714Z"
+	},
+	"updatedAt": {
+		"$date": "2026-02-26T22:48:31.478Z"
+	},
+	"audioFileUrl": "/audio/songs/83675980-c426-4b7a-8593-ff724dca6b01.mp3"
 }]
 

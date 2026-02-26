@@ -58,3 +58,9 @@ certs/*.pem
 # Temporary files
 *.tmp
 *.bak
+
+# HDFS data
+data/hdfs/
+
+# Local audio files (uploaded to HDFS)
+songs/

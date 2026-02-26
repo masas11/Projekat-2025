@@ -98,8 +98,13 @@ const AudioPlayer = ({ songId, songName, audioFileUrl }) => {
   };
 
   const getAudioUrl = () => {
-    // If song has direct audio file URL, use it
-    if (audioFileUrl) {
+    // If song has HDFS path (starts with /audio/), use stream endpoint
+    if (audioFileUrl && (audioFileUrl.startsWith('/audio/') || audioFileUrl.startsWith('hdfs://'))) {
+      return api.getStreamUrl(songId);
+    }
+    
+    // If song has external URL (http/https), use it directly
+    if (audioFileUrl && (audioFileUrl.startsWith('http://') || audioFileUrl.startsWith('https://'))) {
       return audioFileUrl;
     }
     

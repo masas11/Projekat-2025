@@ -87,12 +87,13 @@ func (r *SongRepository) Update(ctx context.Context, id string, song *model.Song
 	
 	update := bson.M{
 		"$set": bson.M{
-			"name":      song.Name,
-			"duration":  song.Duration,
-			"genre":     song.Genre,
-			"albumId":   song.AlbumID,
-			"artistIds": song.ArtistIDs,
-			"updatedAt": song.UpdatedAt,
+			"name":         song.Name,
+			"duration":     song.Duration,
+			"genre":        song.Genre,
+			"albumId":      song.AlbumID,
+			"artistIds":    song.ArtistIDs,
+			"audioFileUrl": song.AudioFileURL,
+			"updatedAt":    song.UpdatedAt,
 		},
 	}
 

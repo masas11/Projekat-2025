@@ -30,6 +30,8 @@ const Songs = () => {
     selectedArtistIds: [],
     audioFileUrl: '',
   });
+  const [audioFile, setAudioFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
   const { isAdmin, user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const [subscriptionMessage, setSubscriptionMessage] = useState('');
@@ -139,6 +141,7 @@ const Songs = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setUploading(false);
 
     const songData = {
       name: formData.name,
@@ -150,14 +153,38 @@ const Songs = () => {
     };
 
     try {
+      let createdSongId;
       if (editingSong) {
         await api.updateSong(editingSong.id, songData);
+        createdSongId = editingSong.id;
       } else {
-        await api.createSong(songData);
+        const newSong = await api.createSong(songData);
+        createdSongId = newSong.id;
       }
+
+      // Upload audio file to HDFS if selected (2.11)
+      if (audioFile && createdSongId) {
+        setUploading(true);
+        try {
+          const uploadResult = await api.uploadAudioFile(createdSongId, audioFile);
+          console.log('Audio uploaded to HDFS:', uploadResult);
+          // Update song with HDFS path
+          await api.updateSong(createdSongId, {
+            ...songData,
+            audioFileUrl: uploadResult.hdfsPath,
+          });
+        } catch (uploadErr) {
+          console.error('Upload error:', uploadErr);
+          setError(`Pesma je kreirana, ali upload audio fajla nije uspeo: ${uploadErr.message}`);
+        } finally {
+          setUploading(false);
+        }
+      }
+
       setShowForm(false);
       setEditingSong(null);
       setFormData({ name: '', duration: '', genre: '', albumId: '', selectedArtistIds: [], audioFileUrl: '' });
+      setAudioFile(null);
       loadSongs();
     } catch (err) {
       setError(err.message || 'Greška pri čuvanju pesme');
@@ -174,6 +201,7 @@ const Songs = () => {
       selectedArtistIds: song.artistIds || song.artistIDs || [],
       audioFileUrl: song.audioFileUrl || '',
     });
+    setAudioFile(null);
     setShowForm(true);
   };
 
@@ -181,6 +209,7 @@ const Songs = () => {
     setShowForm(false);
     setEditingSong(null);
     setFormData({ name: '', duration: '', genre: '', albumId: '', selectedArtistIds: [], audioFileUrl: '' });
+    setAudioFile(null);
   };
 
   const loadSubscriptions = async () => {
@@ -470,16 +499,45 @@ const Songs = () => {
                   </div>
                 </div>
                 <div className="form-group">
-                  <label>🔊 Audio File URL:</label>
+                  <label>🔊 Audio File (HDFS Upload - 2.11):</label>
+                  <input
+                    type="file"
+                    accept=".mp3,.wav,.ogg,.m4a,.flac"
+                    onChange={(e) => {
+                      const file = e.target.files[0];
+                      if (file) {
+                        setAudioFile(file);
+                        // Clear URL field when file is selected
+                        setFormData({ ...formData, audioFileUrl: '' });
+                      }
+                    }}
+                    style={{ marginBottom: '8px' }}
+                  />
+                  {audioFile && (
+                    <div style={{ marginTop: '8px', padding: '8px', background: '#f0f0f0', borderRadius: '4px', fontSize: '12px' }}>
+                      ✓ Izabran: {audioFile.name} ({(audioFile.size / 1024 / 1024).toFixed(2)} MB)
+                    </div>
+                  )}
+                  {uploading && (
+                    <div style={{ marginTop: '8px', color: '#007bff', fontSize: '12px' }}>
+                      ⏳ Upload-uje se na HDFS...
+                    </div>
+                  )}
+                </div>
+                <div className="form-group">
+                  <label>🔗 Ili Audio File URL (opciono):</label>
                   <input
                     type="text"
                     name="audioFileUrl"
                     value={formData.audioFileUrl}
                     onChange={handleChange}
-                    placeholder="/music/Lady Gaga - Abracadabra.mp3 ili https://example.com/song.mp3"
+                    placeholder="https://example.com/song.mp3 (koristi se samo ako nije izabran fajl)"
+                    disabled={!!audioFile}
                   />
                   <small style={{ display: 'block', marginTop: '6px', color: '#666', fontSize: '12px' }}>
-                    Unesite URL do audio fajla (MP3, WAV, OGG) ili lokalnu putanju
+                    {audioFile 
+                      ? 'Fajl je izabran, biće upload-ovan na HDFS' 
+                      : 'Unesite URL do audio fajla (MP3, WAV, OGG) ili izaberite fajl za upload na HDFS'}
                   </small>
                 </div>
                 {error && (

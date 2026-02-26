@@ -94,6 +94,7 @@ services:
       - JWT_SECRET=your-secret-key-change-in-production
       - SUBSCRIPTIONS_SERVICE_URL=http://subscriptions-service:8004
       - RECOMMENDATION_SERVICE_URL=http://recommendation-service:8006
+      - HDFS_NAMENODE_URL=http://hdfs-namenode:9870
       # TLS_CERT_FILE and TLS_KEY_FILE removed for development
       # - TLS_CERT_FILE=/app/certs/server.crt
       # - TLS_KEY_FILE=/app/certs/server.key
@@ -104,6 +105,8 @@ services:
       - ./logs/content-service:/app/logs
     depends_on:
       mongodb-content:
+        condition: service_started
+      hdfs-namenode:
         condition: service_healthy
     networks:
       - music-streaming-network
@@ -319,6 +322,42 @@ services:
       - "6832:6832/udp"  # UDP agent
     environment:
       - COLLECTOR_ZIPKIN_HOST_PORT=:9411
+    networks:
+      - music-streaming-network
+
+  # HDFS (2.11) - Hadoop Distributed File System for audio files
+  hdfs-namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: hdfs-namenode
+    environment:
+      - CLUSTER_NAME=hadoop-cluster
+      - CORE_CONF_fs_defaultFS=hdfs://hdfs-namenode:9000
+    ports:
+      - "9870:9870"  # NameNode Web UI
+      - "9000:9000"  # NameNode RPC
+    volumes:
+      - ./data/hdfs/namenode:/hadoop/dfs/name
+    networks:
+      - music-streaming-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9870"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  hdfs-datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: hdfs-datanode
+    environment:
+      - SERVICE_PRECONDITION=hdfs-namenode:9870
+      - CORE_CONF_fs_defaultFS=hdfs://hdfs-namenode:9000
+    ports:
+      - "9864:9864"  # DataNode Web UI
+    volumes:
+      - ./data/hdfs/datanode:/hadoop/dfs/data
+    depends_on:
+      hdfs-namenode:
+        condition: service_healthy
     networks:
       - music-streaming-network
 

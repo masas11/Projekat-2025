@@ -9,6 +9,7 @@ type Config struct {
 	JWTSecret               string
 	SubscriptionsServiceURL string
 	RecommendationServiceURL string
+	HDFSNamenodeURL         string
 }
 
 func Load() *Config {
@@ -42,6 +43,11 @@ func Load() *Config {
 		recommendationServiceURL = "http://recommendation-service:8006"
 	}
 
+	hdfsNamenodeURL := os.Getenv("HDFS_NAMENODE_URL")
+	if hdfsNamenodeURL == "" {
+		hdfsNamenodeURL = "http://hdfs-namenode:9870"
+	}
+
 	return &Config{
 		Port:                     port,
 		MongoDBURI:               mongoURI,
@@ -49,5 +55,6 @@ func Load() *Config {
 		JWTSecret:                jwtSecret,
 		SubscriptionsServiceURL:  subscriptionsServiceURL,
 		RecommendationServiceURL: recommendationServiceURL,
+		HDFSNamenodeURL:          hdfsNamenodeURL,
 	}
 }

@@ -3,7 +3,11 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
+	"log"
 	"net/http"
+	"path/filepath"
 	"strings"
 
 	"content-service/internal/dto"
@@ -11,6 +15,7 @@ import (
 	"content-service/internal/logger"
 	"content-service/internal/middleware"
 	"content-service/internal/model"
+	"content-service/internal/storage"
 	"content-service/internal/store"
 )
 
@@ -29,9 +34,10 @@ type SongHandler struct {
 	SubscriptionsServiceURL  string
 	RecommendationServiceURL  string
 	Logger                   *logger.Logger
+	HDFSClient               *storage.HDFSClient
 }
 
-func NewSongHandler(repo *store.SongRepository, albumRepo *store.AlbumRepository, artistRepo *store.ArtistRepository, subscriptionsServiceURL, recommendationServiceURL string, log *logger.Logger) *SongHandler {
+func NewSongHandler(repo *store.SongRepository, albumRepo *store.AlbumRepository, artistRepo *store.ArtistRepository, subscriptionsServiceURL, recommendationServiceURL string, log *logger.Logger, hdfsClient *storage.HDFSClient) *SongHandler {
 	return &SongHandler{
 		Repo:                     repo,
 		AlbumRepo:                albumRepo,
@@ -39,6 +45,7 @@ func NewSongHandler(repo *store.SongRepository, albumRepo *store.AlbumRepository
 		SubscriptionsServiceURL:  subscriptionsServiceURL,
 		RecommendationServiceURL: recommendationServiceURL,
 		Logger:                   log,
+		HDFSClient:               hdfsClient,
 	}
 }
 
@@ -395,17 +402,64 @@ func (h *SongHandler) StreamSong(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 
 	if song.AudioFileURL != "" {
-		// If song has a URL, redirect to it or proxy it
+		// If song has an external URL, redirect to it
 		if strings.HasPrefix(song.AudioFileURL, "http://") || strings.HasPrefix(song.AudioFileURL, "https://") {
-			// For external URLs, we could either redirect or proxy
-			// For now, let's redirect
 			http.Redirect(w, r, song.AudioFileURL, http.StatusTemporaryRedirect)
 			return
-		} else {
-			// For local file paths, serve the file
-			http.ServeFile(w, r, song.AudioFileURL)
+		}
+
+		// Check if it's an HDFS path (starts with /audio/ or hdfs://)
+		if strings.HasPrefix(song.AudioFileURL, "/audio/") || strings.HasPrefix(song.AudioFileURL, "hdfs://") {
+			// Download from HDFS (2.11)
+			hdfsPath := song.AudioFileURL
+			if strings.HasPrefix(hdfsPath, "hdfs://") {
+				// Extract path from hdfs://namenode:port/path
+				parts := strings.SplitN(hdfsPath, "/", 4)
+				if len(parts) >= 4 {
+					hdfsPath = "/" + parts[3]
+				}
+			}
+
+			audioData, err := h.HDFSClient.DownloadFile(hdfsPath)
+			if err != nil {
+				if h.Logger != nil {
+					h.Logger.Log(logger.LevelError, logger.EventStateChange, "Failed to download audio from HDFS", map[string]interface{}{
+						"error":    err.Error(),
+						"songId":   id,
+						"hdfsPath": hdfsPath,
+					})
+				}
+				http.Error(w, "failed to retrieve audio file", http.StatusInternalServerError)
+				return
+			}
+
+			// Set content type based on file extension
+			ext := strings.ToLower(filepath.Ext(hdfsPath))
+			contentType := "audio/mpeg" // default
+			switch ext {
+			case ".mp3":
+				contentType = "audio/mpeg"
+			case ".wav":
+				contentType = "audio/wav"
+			case ".ogg":
+				contentType = "audio/ogg"
+			case ".m4a":
+				contentType = "audio/mp4"
+			case ".flac":
+				contentType = "audio/flac"
+			}
+			w.Header().Set("Content-Type", contentType)
+			w.Header().Set("Content-Length", fmt.Sprintf("%d", len(audioData)))
+
+			// Stream the audio data
+			w.WriteHeader(http.StatusOK)
+			w.Write(audioData)
 			return
 		}
+
+		// Fallback to local file (for backward compatibility)
+		http.ServeFile(w, r, song.AudioFileURL)
+		return
 	}
 
 	// If no audio file is specified, return a placeholder or error
@@ -415,6 +469,150 @@ func (h *SongHandler) StreamSong(w http.ResponseWriter, r *http.Request) {
 		"error": "No audio file available for this song",
 		"song":  song.Name,
 	})
+}
+
+// UploadAudio uploads an audio file to HDFS (2.11)
+func (h *SongHandler) UploadAudio(w http.ResponseWriter, r *http.Request) {
+	log.Printf("UploadAudio called: Method=%s, Path=%s, ContentType=%s", r.Method, r.URL.Path, r.Header.Get("Content-Type"))
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Parse multipart form (max 100MB)
+	log.Printf("Parsing multipart form...")
+	err := r.ParseMultipartForm(100 << 20) // 100 MB
+	if err != nil {
+		log.Printf("Error parsing multipart form: %v", err)
+		http.Error(w, "failed to parse multipart form: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	log.Printf("Multipart form parsed successfully")
+
+	// Get file from form
+	log.Printf("Getting file from form...")
+	file, header, err := r.FormFile("audio")
+	if err != nil {
+		log.Printf("Error getting file from form: %v", err)
+		http.Error(w, "audio file is required: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+	log.Printf("File retrieved: %s, size: %d", header.Filename, header.Size)
+
+	// Get song ID from form or path
+	songID := r.FormValue("songId")
+	if songID == "" {
+		// Try to extract from path
+		path := strings.TrimPrefix(r.URL.Path, "/songs/")
+		path = strings.TrimSuffix(path, "/upload")
+		if path != "" {
+			songID = path
+		}
+	}
+	log.Printf("Song ID: %s", songID)
+
+	if songID == "" {
+		log.Printf("Song ID is empty")
+		http.Error(w, "songId is required", http.StatusBadRequest)
+		return
+	}
+
+	// Check if song exists
+	log.Printf("Checking if song exists: %s", songID)
+	song, err := h.Repo.GetByID(r.Context(), songID)
+	if err != nil {
+		log.Printf("Song not found: %v", err)
+		http.Error(w, "song not found", http.StatusNotFound)
+		return
+	}
+	log.Printf("Song found: %s", song.Name)
+
+	// Validate file extension
+	ext := strings.ToLower(filepath.Ext(header.Filename))
+	log.Printf("File extension: %s", ext)
+	allowedExts := map[string]bool{
+		".mp3":  true,
+		".wav":  true,
+		".ogg":  true,
+		".m4a":  true,
+		".flac": true,
+	}
+	if !allowedExts[ext] {
+		log.Printf("File type not allowed: %s", ext)
+		http.Error(w, "file type not allowed. Allowed: mp3, wav, ogg, m4a, flac", http.StatusBadRequest)
+		return
+	}
+
+	// Read file data
+	log.Printf("Reading file data...")
+	fileData, err := io.ReadAll(file)
+	if err != nil {
+		log.Printf("Error reading file: %v", err)
+		http.Error(w, "failed to read file: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	log.Printf("File data read: %d bytes", len(fileData))
+
+	// Upload to HDFS (2.11)
+	hdfsPath := fmt.Sprintf("/audio/songs/%s%s", songID, ext)
+	log.Printf("Uploading to HDFS: %s", hdfsPath)
+	err = h.HDFSClient.UploadData(fileData, hdfsPath)
+	if err != nil {
+		log.Printf("HDFS upload failed: %v", err)
+		if h.Logger != nil {
+			h.Logger.Log(logger.LevelError, logger.EventStateChange, "Failed to upload audio to HDFS", map[string]interface{}{
+				"error":    err.Error(),
+				"songId":   songID,
+				"hdfsPath": hdfsPath,
+			})
+		}
+		http.Error(w, "failed to upload file to HDFS: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("HDFS upload successful")
+
+	// Update song with HDFS path
+	song.AudioFileURL = hdfsPath
+	log.Printf("Updating song with HDFS path...")
+	err = h.Repo.Update(r.Context(), songID, song)
+	if err != nil {
+		log.Printf("Error updating song: %v", err)
+		if h.Logger != nil {
+			h.Logger.Log(logger.LevelError, logger.EventStateChange, "Failed to update song with HDFS path", map[string]interface{}{
+				"error":  err.Error(),
+				"songId": songID,
+			})
+		}
+		// Don't fail the request, file is already uploaded
+	} else {
+		log.Printf("Song updated successfully")
+	}
+
+	// Log admin activity
+	if h.Logger != nil {
+		adminID := getAdminIDFromSongContext(r.Context())
+		h.Logger.LogAdminActivity(adminID, "UPLOAD_AUDIO", "songs", map[string]interface{}{
+			"songId":   songID,
+			"hdfsPath": hdfsPath,
+			"fileName": header.Filename,
+			"fileSize": len(fileData),
+		})
+	}
+
+	// Return success response
+	log.Printf("Returning success response")
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message":  "Audio file uploaded successfully",
+		"songId":   songID,
+		"hdfsPath": hdfsPath,
+		"fileName": header.Filename,
+		"fileSize": len(fileData),
+	})
+	log.Printf("Upload completed successfully")
 }
 
 func toSongResponse(song *model.Song) *dto.SongResponse {

@@ -12,6 +12,7 @@ import (
 	"content-service/internal/handler"
 	"content-service/internal/logger"
 	"content-service/internal/middleware"
+	"content-service/internal/storage"
 	"content-service/internal/store"
 	"shared/tracing"
 )
@@ -53,10 +54,14 @@ func main() {
 	albumRepo := store.NewAlbumRepository(dbStore.Database)
 	songRepo := store.NewSongRepository(dbStore.Database)
 
+	// Initialize HDFS client (2.11)
+	hdfsClient := storage.NewHDFSClient(cfg.HDFSNamenodeURL)
+	log.Println("HDFS client initialized")
+
 	// Initialize handlers
 	artistHandler := handler.NewArtistHandler(artistRepo, cfg.SubscriptionsServiceURL, cfg.RecommendationServiceURL, appLogger)
 	albumHandler := handler.NewAlbumHandler(albumRepo, artistRepo, cfg.SubscriptionsServiceURL, cfg.RecommendationServiceURL, appLogger)
-	songHandler := handler.NewSongHandler(songRepo, albumRepo, artistRepo, cfg.SubscriptionsServiceURL, cfg.RecommendationServiceURL, appLogger)
+	songHandler := handler.NewSongHandler(songRepo, albumRepo, artistRepo, cfg.SubscriptionsServiceURL, cfg.RecommendationServiceURL, appLogger, hdfsClient)
 
 	mux := http.NewServeMux()
 
@@ -157,6 +162,7 @@ func main() {
 	// PUT /songs/{id} - update song (admin only, requires JWT)
 	// DELETE /songs/{id} - delete song (admin only, requires JWT)
 	// GET /songs/{id}/stream - stream song audio (public)
+	// POST /songs/{id}/upload - upload audio file to HDFS (admin only, requires JWT) (2.11)
 	mux.HandleFunc("/songs/", func(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimPrefix(r.URL.Path, "/songs/")
 		if path == "" {
@@ -169,6 +175,14 @@ func main() {
 			songID := strings.TrimSuffix(path, "/stream")
 			r.URL.Path = "/songs/" + songID + "/stream"
 			songHandler.StreamSong(w, r)
+			return
+		}
+
+		// Check if this is an upload request (2.11)
+		if strings.HasSuffix(path, "/upload") {
+			songID := strings.TrimSuffix(path, "/upload")
+			r.URL.Path = "/songs/" + songID + "/upload"
+			middleware.JWTAuth(cfg)(middleware.AdminOnly(songHandler.UploadAudio))(w, r)
 			return
 		}
 

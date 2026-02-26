@@ -49,15 +49,6 @@ func proxyRequest(w http.ResponseWriter, r *http.Request, targetURL string, appL
 		targetURL = targetURL + "?" + r.URL.RawQuery
 	}
 
-	// Čitanje body-ja zahteva
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		// CORS headers već postavljeni na početku funkcije
-		http.Error(w, "Failed to read request body", http.StatusBadRequest)
-		return
-	}
-	defer r.Body.Close()
-
 	// Eksplicitno postavljen timeout za vraćanje odgovora korisniku (2.7.6)
 	// Koristimo request context tako da se može otkazati
 	// Povećan timeout za notifications-service zbog Cassandra inicijalizacije
@@ -65,12 +56,34 @@ func proxyRequest(w http.ResponseWriter, r *http.Request, targetURL string, appL
 	if strings.Contains(targetURL, "notifications-service") {
 		timeout = 15 * time.Second
 	}
+	// Povećan timeout za upload operacije (HDFS može da traje)
+	if strings.Contains(targetURL, "/upload") {
+		timeout = 30 * time.Second
+	}
 	
 	ctx, cancel := context.WithTimeout(r.Context(), timeout)
 	defer cancel()
 
+	// Za multipart/form-data, prosleđujemo body direktno bez čitanja
+	// Inače čitamo body i prosleđujemo ga
+	var reqBody io.Reader
+	contentType := r.Header.Get("Content-Type")
+	if strings.HasPrefix(contentType, "multipart/form-data") {
+		// Za multipart, prosleđujemo originalni body direktno
+		reqBody = r.Body
+	} else {
+		// Za ostale tipove, čitamo body
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "Failed to read request body", http.StatusBadRequest)
+			return
+		}
+		defer r.Body.Close()
+		reqBody = bytes.NewBuffer(body)
+	}
+
 	// Kreiranje novog zahteva ka backend servisu sa context-om
-	req, err := http.NewRequestWithContext(ctx, r.Method, targetURL, bytes.NewBuffer(body))
+	req, err := http.NewRequestWithContext(ctx, r.Method, targetURL, reqBody)
 	if err != nil {
 		// CORS headers već postavljeni na početku funkcije
 		http.Error(w, "Failed to create request", http.StatusInternalServerError)
@@ -662,6 +675,17 @@ func main() {
 		// Check if this is a streaming request
 		if strings.HasSuffix(path, "/stream") {
 			proxyRequest(w, r, cfg.ContentServiceURL+"/songs/"+path, appLogger)
+			return
+		}
+
+		// Check if this is an upload request (2.11)
+		if strings.HasSuffix(path, "/upload") && r.Method == http.MethodPost {
+			log.Printf("Upload request detected: %s", path)
+			middleware.RequireRole("ADMIN", cfg, appLogger)(func(w http.ResponseWriter, r *http.Request) {
+				targetURL := cfg.ContentServiceURL + "/songs/" + path
+				log.Printf("Proxying upload to: %s", targetURL)
+				proxyRequest(w, r, targetURL, appLogger)
+			})(w, r)
 			return
 		}
 

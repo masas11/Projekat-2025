@@ -229,6 +229,32 @@ class ApiService {
     });
   }
 
+  async uploadAudioFile(songId, audioFile) {
+    const formData = new FormData();
+    formData.append('audio', audioFile);
+    formData.append('songId', songId);
+
+    const token = localStorage.getItem('token');
+    if (!token) {
+      throw new Error('Not authenticated');
+    }
+
+    const response = await fetch(`${this.baseURL}/api/content/songs/${songId}/upload`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Upload failed' }));
+      throw new Error(error.error || error.message || 'Upload failed');
+    }
+
+    return response.json();
+  }
+
   async deleteSong(id) {
     return this.request(`/api/content/songs/${id}`, {
       method: 'DELETE',

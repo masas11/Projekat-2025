@@ -13,6 +13,7 @@ import (
 	"notifications-service/internal/handler"
 	"notifications-service/internal/model"
 	"notifications-service/internal/store"
+	"shared/tracing"
 )
 
 func initSampleNotifications(ctx context.Context, repo *store.NotificationRepository) {
@@ -73,11 +74,20 @@ func initSampleNotifications(ctx context.Context, repo *store.NotificationReposi
 
 func main() {
 	cfg := config.Load()
+	var err error
+
+	// Initialize tracing (2.10)
+	cleanup, err := tracing.InitTracing("notifications-service")
+	if err != nil {
+		log.Printf("Warning: Failed to initialize tracing: %v", err)
+	} else {
+		defer cleanup()
+		log.Println("Tracing initialized for notifications-service")
+	}
 
 	// Retry mechanism to wait for Cassandra to be ready
 	maxRetries := 30
 	retryDelay := 2 * time.Second
-	var err error
 
 	log.Println("Waiting for Cassandra to be ready...")
 	for i := 0; i < maxRetries; i++ {

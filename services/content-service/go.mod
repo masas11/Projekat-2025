@@ -6,7 +6,10 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.2.1
 	github.com/google/uuid v1.6.0
 	go.mongodb.org/mongo-driver v1.14.0
+	shared v0.0.0
 )
+
+replace shared => ../shared
 
 require (
 	github.com/golang/snappy v0.0.1 // indirect

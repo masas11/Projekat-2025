@@ -13,10 +13,20 @@ import (
 	"content-service/internal/logger"
 	"content-service/internal/middleware"
 	"content-service/internal/store"
+	"shared/tracing"
 )
 
 func main() {
 	cfg := config.Load()
+
+	// Initialize tracing (2.10)
+	cleanup, err := tracing.InitTracing("content-service")
+	if err != nil {
+		log.Printf("Warning: Failed to initialize tracing: %v", err)
+	} else {
+		defer cleanup()
+		log.Println("Tracing initialized for content-service")
+	}
 
 	// Initialize MongoDB connection
 	dbStore, err := store.NewMongoDBStore(cfg.MongoDBURI, cfg.MongoDBDatabase)
@@ -242,6 +252,8 @@ func main() {
 			Addr:    ":" + cfg.Port,
 			Handler: mux,
 		}
+		// Wrap server handler with tracing middleware
+		server.Handler = tracing.HTTPMiddleware(mux)
 		if err := server.ListenAndServeTLS(certFile, keyFile); err != nil {
 			if appLogger != nil {
 				appLogger.LogTLSFailure("content-service", err.Error(), "")
@@ -250,6 +262,8 @@ func main() {
 		}
 	} else {
 		log.Println("Starting HTTP server on port", cfg.Port)
-		log.Fatal(http.ListenAndServe(":"+cfg.Port, mux))
+		// Wrap mux with tracing middleware
+		handler := tracing.HTTPMiddleware(mux)
+		log.Fatal(http.ListenAndServe(":"+cfg.Port, handler))
 	}
 }

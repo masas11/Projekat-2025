@@ -7,7 +7,6 @@ const Profile = () => {
   const { user, isAuthenticated, isAdmin } = useAuth();
   const navigate = useNavigate();
   const [subscriptions, setSubscriptions] = useState([]);
-  const [artists, setArtists] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -27,21 +26,11 @@ const Profile = () => {
       const subscriptionsArray = Array.isArray(subs) ? subs : [];
       setSubscriptions(subscriptionsArray);
       
-      // Load artist details for artist subscriptions
-      const artistSubs = subscriptionsArray.filter(sub => sub && sub.type === 'artist');
-      if (artistSubs.length > 0) {
-        const artistPromises = artistSubs.map(sub => 
-          api.getArtist(sub.artistId).catch(() => null)
-        );
-        const artistData = await Promise.all(artistPromises);
-        setArtists(artistData.filter(a => a !== null));
-      } else {
-        setArtists([]);
-      }
+      // CQRS (2.9): ArtistName je već u subscription objektu, nema potrebe za pozivom content-service
+      // Uklonjen kod koji je pozivao api.getArtist() za svaku pretplatu
     } catch (err) {
       setError(err.message || 'Greška pri učitavanju pretplata');
       setSubscriptions([]);
-      setArtists([]);
     } finally {
       setLoading(false);
     }
@@ -73,9 +62,9 @@ const Profile = () => {
     }
   };
 
-  const getArtistName = (artistId) => {
-    const artist = artists.find(a => a.id === artistId);
-    return artist ? artist.name : `Umetnik ${artistId}`;
+  // CQRS (2.9): Koristi artistName direktno iz subscription objekta
+  const getArtistName = (subscription) => {
+    return subscription.artistName || `Umetnik ${subscription.artistId}`;
   };
 
   if (!isAuthenticated) {
@@ -145,7 +134,7 @@ const Profile = () => {
                         style={{ margin: 0, cursor: 'pointer' }}
                         onClick={() => navigate(`/artists/${sub.artistId}`)}
                       >
-                        {getArtistName(sub.artistId)}
+                        {getArtistName(sub)}
                       </h4>
                       <p style={{ margin: '5px 0 0 0', fontSize: '0.9em', color: '#666' }}>
                         Pretplaćen od: {new Date(sub.createdAt).toLocaleDateString()}

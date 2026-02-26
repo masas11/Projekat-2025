@@ -16,6 +16,7 @@ import (
 	"subscriptions-service/config"
 	"subscriptions-service/internal/model"
 	"subscriptions-service/internal/store"
+	"shared/tracing"
 )
 
 // Circuit Breaker implementation for resilience
@@ -141,10 +142,17 @@ func RetryWithExponentialBackoff(ctx context.Context, config RetryConfig, fn fun
 
 // Check if artist exists by ID with circuit breaker, retry and fallback (2.7.5)
 func checkArtistExists(client *http.Client, contentURL, artistID string, cb *CircuitBreaker, ctx context.Context) bool {
+	_, exists := getArtistName(client, contentURL, artistID, cb, ctx)
+	return exists
+}
+
+// Get artist name by ID (CQRS - for denormalization)
+func getArtistName(client *http.Client, contentURL, artistID string, cb *CircuitBreaker, ctx context.Context) (string, bool) {
 	checkURL := contentURL + "/artists/" + url.QueryEscape(artistID)
 	retryConfig := DefaultRetryConfig()
 
 	// Use circuit breaker for the call
+	var artistName string
 	var exists bool
 	var lastErr error
 
@@ -174,8 +182,17 @@ func checkArtistExists(client *http.Client, contentURL, artistID string, cb *Cir
 			defer resp.Body.Close()
 			
 			if resp.StatusCode == http.StatusOK {
+				// Parse artist response to get name (CQRS)
+				var artist map[string]interface{}
+				if err := json.NewDecoder(resp.Body).Decode(&artist); err == nil {
+					if name, ok := artist["name"].(string); ok {
+						artistName = name
+						exists = true
+						return nil
+					}
+				}
 				exists = true
-				return nil // Success
+				return nil // Success even if name parsing fails
 			}
 			
 			lastErr = fmt.Errorf("unexpected status code: %d", resp.StatusCode)
@@ -187,13 +204,13 @@ func checkArtistExists(client *http.Client, contentURL, artistID string, cb *Cir
 		if _, ok := err.(*CircuitBreakerError); ok {
 			log.Printf("Circuit breaker open for artist %s, using fallback", artistID)
 		} else {
-			log.Printf("Error checking artist %s: %v, using fallback. Last error: %v", artistID, err, lastErr)
+			log.Printf("Error getting artist %s: %v, using fallback. Last error: %v", artistID, err, lastErr)
 		}
-		// Fallback logic: return false (artist not found) when service is unavailable
-		return false
+		// Fallback logic: return empty name and false when service is unavailable
+		return "", false
 	}
 
-	return exists
+	return artistName, exists
 }
 
 func addCORSHeaders(w http.ResponseWriter) {
@@ -489,6 +506,15 @@ func handleNewSongEvent(ctx context.Context, event map[string]interface{}, repo 
 func main() {
 	cfg := config.Load()
 
+	// Initialize tracing (2.10)
+	cleanup, err := tracing.InitTracing("subscriptions-service")
+	if err != nil {
+		log.Printf("Warning: Failed to initialize tracing: %v", err)
+	} else {
+		defer cleanup()
+		log.Println("Tracing initialized for subscriptions-service")
+	}
+
 	// Initialize MongoDB connection
 	dbStore, err := store.NewMongoDBStore(cfg.MongoDBURI, cfg.MongoDBDatabase)
 	if err != nil {
@@ -692,8 +718,8 @@ func main() {
 			default:
 			}
 
-			// Synchronous call to check if artist exists with circuit breaker and retry (2.5, 2.7.4, 2.7.5)
-			exists := checkArtistExists(client, cfg.ContentServiceURL, artistID, contentServiceCB, ctx)
+			// CQRS: Get artist name from content-service and denormalize it (2.9)
+			artistName, exists := getArtistName(client, cfg.ContentServiceURL, artistID, contentServiceCB, ctx)
 			if !exists {
 				// Check if context was cancelled during artist check (2.7.7)
 				select {
@@ -719,11 +745,12 @@ func main() {
 			default:
 			}
 
-			// Create subscription
+			// Create subscription with denormalized artist name (CQRS - 2.9)
 			subscription := &model.Subscription{
-				UserID:   userID,
-				Type:     "artist",
-				ArtistID: artistID,
+				UserID:     userID,
+				Type:       "artist",
+				ArtistID:   artistID,
+				ArtistName: artistName, // CQRS: Store artist name for read optimization
 			}
 
 			err = subscriptionRepo.Create(ctx, subscription)
@@ -944,11 +971,13 @@ func main() {
 	// Support HTTPS if certificates are provided
 	certFile := os.Getenv("TLS_CERT_FILE")
 	keyFile := os.Getenv("TLS_KEY_FILE")
+	// Wrap mux with tracing middleware
+	handler := tracing.HTTPMiddleware(mux)
 	if certFile != "" && keyFile != "" {
 		log.Println("Starting HTTPS server on port", cfg.Port)
-		log.Fatal(http.ListenAndServeTLS(":"+cfg.Port, certFile, keyFile, mux))
+		log.Fatal(http.ListenAndServeTLS(":"+cfg.Port, certFile, keyFile, handler))
 	} else {
 		log.Println("Starting HTTP server on port", cfg.Port)
-		log.Fatal(http.ListenAndServe(":"+cfg.Port, mux))
+		log.Fatal(http.ListenAndServe(":"+cfg.Port, handler))
 	}
 }

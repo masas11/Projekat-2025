@@ -13,10 +13,20 @@ import (
 	"recommendation-service/config"
 	"recommendation-service/internal/model"
 	"recommendation-service/internal/store"
+	"shared/tracing"
 )
 
 func main() {
 	cfg := config.Load()
+
+	// Initialize tracing (2.10)
+	cleanup, err := tracing.InitTracing("recommendation-service")
+	if err != nil {
+		log.Printf("Warning: Failed to initialize tracing: %v", err)
+	} else {
+		defer cleanup()
+		log.Println("Tracing initialized for recommendation-service")
+	}
 
 	// Initialize Neo4j store
 	neo4jStore, err := store.NewNeo4jStore(cfg)

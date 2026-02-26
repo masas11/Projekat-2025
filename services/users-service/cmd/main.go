@@ -18,6 +18,7 @@ import (
 	"users-service/internal/middleware"
 	"users-service/internal/model"
 	"users-service/internal/store"
+	"shared/tracing"
 )
 
 func initAdminUser(ctx context.Context, userRepo *store.UserRepository, cfg *config.Config) {
@@ -56,6 +57,15 @@ func initAdminUser(ctx context.Context, userRepo *store.UserRepository, cfg *con
 func main() {
 	// učitavanje konfiguracije
 	cfg := config.Load()
+
+	// Initialize tracing (2.10)
+	cleanup, err := tracing.InitTracing("users-service")
+	if err != nil {
+		log.Printf("Warning: Failed to initialize tracing: %v", err)
+	} else {
+		defer cleanup()
+		log.Println("Tracing initialized for users-service")
+	}
 
 	// Initialize MongoDB connection
 	dbStore, err := store.NewMongoDBStore(cfg.MongoDBURI, cfg.MongoDBDatabase)
@@ -137,6 +147,8 @@ func main() {
 			Addr:    ":" + cfg.Port,
 			Handler: mux,
 		}
+		// Wrap server handler with tracing middleware
+		server.Handler = tracing.HTTPMiddleware(mux)
 		if err := server.ListenAndServeTLS(certFile, keyFile); err != nil {
 			if appLogger != nil {
 				appLogger.LogTLSFailure("users-service", err.Error(), "")
@@ -145,6 +157,8 @@ func main() {
 		}
 	} else {
 		log.Println("Starting HTTP server on port", cfg.Port)
-		log.Fatal(http.ListenAndServe(":"+cfg.Port, mux))
+		// Wrap mux with tracing middleware
+		handler := tracing.HTTPMiddleware(mux)
+		log.Fatal(http.ListenAndServe(":"+cfg.Port, handler))
 	}
 }

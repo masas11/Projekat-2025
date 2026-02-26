@@ -2,12 +2,16 @@ package events
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"log"
 	"net/http"
 	"strings"
 	"time"
+
+	"shared/tracing"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 // Event types
@@ -67,8 +71,13 @@ type DeletedArtistEvent struct {
 
 // EmitEvent sends an event to subscriptions-service asynchronously
 // Note: Logger parameter is optional - if nil, uses standard log
-func EmitEvent(subscriptionsServiceURL string, event interface{}) {
+// Tracing (2.10): Added context parameter for async tracing
+func EmitEvent(ctx context.Context, subscriptionsServiceURL string, event interface{}) {
 	go func() {
+		// Start span for async event emission (2.10)
+		ctx, span := tracing.StartSpan(ctx, "emit.event")
+		defer span.End()
+
 		eventJSON, err := json.Marshal(event)
 		if err != nil {
 			log.Printf("Failed to marshal event: %v", err)
@@ -76,13 +85,19 @@ func EmitEvent(subscriptionsServiceURL string, event interface{}) {
 		}
 
 		url := subscriptionsServiceURL + "/events"
-		req, err := http.NewRequest("POST", url, bytes.NewBuffer(eventJSON))
+		req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(eventJSON))
 		if err != nil {
 			log.Printf("Failed to create event request: %v", err)
 			return
 		}
 
 		req.Header.Set("Content-Type", "application/json")
+
+		// Propagate trace context to downstream service (2.10)
+		propagator := tracing.GetPropagator()
+		if propagator != nil {
+			propagator.Inject(ctx, propagation.HeaderCarrier(req.Header))
+		}
 
 		// Configure TLS transport for HTTPS
 		tr := &http.Transport{

@@ -719,6 +719,27 @@ const Songs = () => {
                         </span>
                       </div>
                     )}
+                    {/* API Composition: Average Rating and Rating Count */}
+                    {(song.averageRating !== undefined || song.ratingCount !== undefined) && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '16px' }}>⭐</span>
+                        {song.averageRating !== undefined && song.averageRating > 0 && (
+                          <span style={{ fontSize: '14px', color: '#666', fontWeight: '500' }}>
+                            Prosečna ocena: <strong style={{ color: '#667eea' }}>{song.averageRating.toFixed(1)}</strong>
+                          </span>
+                        )}
+                        {song.ratingCount !== undefined && song.ratingCount > 0 && (
+                          <span style={{ fontSize: '14px', color: '#666', fontWeight: '500' }}>
+                            ({song.ratingCount} {song.ratingCount === 1 ? 'ocena' : 'ocena'})
+                          </span>
+                        )}
+                        {(!song.averageRating || song.averageRating === 0) && (!song.ratingCount || song.ratingCount === 0) && (
+                          <span style={{ fontSize: '14px', color: '#999', fontStyle: 'italic' }}>
+                            Još nema ocena
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Admin Actions */}

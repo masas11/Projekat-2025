@@ -116,7 +116,7 @@ func (h *AlbumHandler) CreateAlbum(w http.ResponseWriter, r *http.Request) {
 		ArtistIDs:   album.ArtistIDs,
 		ArtistNames: artistNames,
 	}
-	events.EmitEvent(h.SubscriptionsServiceURL, event)
+	events.EmitEvent(r.Context(), h.SubscriptionsServiceURL, event)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -301,7 +301,7 @@ func (h *AlbumHandler) DeleteAlbum(w http.ResponseWriter, r *http.Request) {
 
 	// Emit deletion event to recommendation-service (asynchronous)
 	if album != nil {
-		events.EmitEvent(h.RecommendationServiceURL, events.DeletedAlbumEvent{
+		events.EmitEvent(r.Context(), h.RecommendationServiceURL, events.DeletedAlbumEvent{
 			Type:    events.EventTypeDeletedAlbum,
 			AlbumID: id,
 		})

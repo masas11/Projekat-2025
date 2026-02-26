@@ -20,6 +20,7 @@ import (
 	"ratings-service/config"
 	"ratings-service/internal/model"
 	"ratings-service/internal/store"
+	"shared/tracing"
 )
 
 // Simple Circuit Breaker implementation
@@ -215,6 +216,15 @@ func checkSpecificSongExists(client *http.Client, contentURL, songID string) boo
 
 func main() {
 	cfg := config.Load()
+
+	// Initialize tracing (2.10)
+	cleanup, err := tracing.InitTracing("ratings-service")
+	if err != nil {
+		log.Printf("Warning: Failed to initialize tracing: %v", err)
+	} else {
+		defer cleanup()
+		log.Println("Tracing initialized for ratings-service")
+	}
 
 	// Connect to MongoDB
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -652,6 +662,52 @@ func main() {
 	})
 
 	// Recommendations endpoint
+	// Get average rating and count for a song
+	mux.HandleFunc("/average-rating", func(w http.ResponseWriter, r *http.Request) {
+		// Add CORS headers
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+		// Handle preflight request
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		songID := r.URL.Query().Get("songId")
+		if songID == "" {
+			http.Error(w, "songId parameter is required", http.StatusBadRequest)
+			return
+		}
+
+		// Get average rating and count from database
+		ratingCtx, ratingCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer ratingCancel()
+
+		avgRating, count, err := ratingStore.GetAverageRating(ratingCtx, songID)
+		if err != nil {
+			log.Printf("Error getting average rating: %v", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("Error getting average rating"))
+			return
+		}
+
+		// Return JSON response
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"songId":      songID,
+			"averageRating": avgRating,
+			"ratingCount":   count,
+		})
+	})
+
 	mux.HandleFunc("/recommendations", func(w http.ResponseWriter, r *http.Request) {
 		// Add CORS headers
 		w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -712,11 +768,13 @@ func main() {
 	// Support HTTPS if certificates are provided
 	certFile := os.Getenv("TLS_CERT_FILE")
 	keyFile := os.Getenv("TLS_KEY_FILE")
+	// Wrap mux with tracing middleware
+	handler := tracing.HTTPMiddleware(mux)
 	if certFile != "" && keyFile != "" {
 		log.Println("Starting HTTPS server on port", cfg.Port)
-		log.Fatal(http.ListenAndServeTLS(":"+cfg.Port, certFile, keyFile, mux))
+		log.Fatal(http.ListenAndServeTLS(":"+cfg.Port, certFile, keyFile, handler))
 	} else {
 		log.Println("Starting HTTP server on port", cfg.Port)
-		log.Fatal(http.ListenAndServe(":"+cfg.Port, mux))
+		log.Fatal(http.ListenAndServe(":"+cfg.Port, handler))
 	}
 }

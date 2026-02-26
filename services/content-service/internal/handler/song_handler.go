@@ -137,9 +137,9 @@ func (h *SongHandler) CreateSong(w http.ResponseWriter, r *http.Request) {
 		ArtistNames: artistNames,
 		AlbumID:     song.AlbumID,
 	}
-	events.EmitEvent(h.SubscriptionsServiceURL, event)
+	events.EmitEvent(r.Context(), h.SubscriptionsServiceURL, event)
 	// Also emit to recommendation-service
-	events.EmitEvent(h.RecommendationServiceURL, map[string]interface{}{
+	events.EmitEvent(r.Context(), h.RecommendationServiceURL, map[string]interface{}{
 		"type":      "song_created",
 		"songId":    song.ID,
 		"name":      song.Name,
@@ -353,7 +353,7 @@ func (h *SongHandler) DeleteSong(w http.ResponseWriter, r *http.Request) {
 
 	// Emit deletion event to recommendation-service (asynchronous)
 	if song != nil {
-		events.EmitEvent(h.RecommendationServiceURL, events.DeletedSongEvent{
+		events.EmitEvent(r.Context(), h.RecommendationServiceURL, events.DeletedSongEvent{
 			Type:   events.EventTypeDeletedSong,
 			SongID: id,
 		})

@@ -1,14 +1,26 @@
 # Build stage
 FROM golang:1.21-alpine AS builder
 
+# Install git for go mod tidy
+RUN apk add --no-cache git
+
 WORKDIR /app
 
-# Copy go mod files
-COPY go.mod ./
+# Copy shared module first
+COPY shared /shared
+
+# Generate go.sum for shared module (MUST be done before building service)
+WORKDIR /shared
+RUN go mod download
+RUN go mod tidy
+WORKDIR /app
+
+# Copy content-service go mod files
+COPY content-service/go.mod content-service/go.sum* ./
 RUN go mod download
 
-# Copy source code
-COPY . .
+# Copy content-service source code
+COPY content-service/ ./
 
 # Update go.mod and go.sum if needed
 RUN go mod tidy

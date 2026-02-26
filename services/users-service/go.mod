@@ -8,7 +8,10 @@ require (
 	go.mongodb.org/mongo-driver v1.14.0
 	golang.org/x/crypto v0.46.0
 	gopkg.in/mail.v2 v2.3.1
+	shared v0.0.0
 )
+
+replace shared => ../shared
 
 require (
 	github.com/golang/snappy v0.0.1 // indirect

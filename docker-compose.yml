@@ -1,8 +1,8 @@
 services:
   api-gateway:
     build:
-      context: ./services/api-gateway
-      dockerfile: Dockerfile
+      context: ./services
+      dockerfile: api-gateway/Dockerfile
     ports:
       - "8081:8080"
     environment:
@@ -17,6 +17,7 @@ services:
       # - TLS_CERT_FILE=/app/certs/server.crt
       # - TLS_KEY_FILE=/app/certs/server.key
       - LOG_DIR=/app/logs
+      - JAEGER_ENDPOINT=http://jaeger:14268/api/traces
     volumes:
       - ./certs:/app/certs:ro
       - ./logs/api-gateway:/app/logs
@@ -32,8 +33,8 @@ services:
 
   users-service:
     build:
-      context: ./services/users-service
-      dockerfile: Dockerfile
+      context: ./services
+      dockerfile: users-service/Dockerfile
     ports:
       - "8001:8001"
     environment:
@@ -53,6 +54,7 @@ services:
       - SMTP_PASSWORD=${SMTP_PASSWORD:-}
       - SMTP_FROM=${SMTP_FROM:-noreply@musicstreaming.com}
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
+      - JAEGER_ENDPOINT=http://jaeger:14268/api/traces
     volumes:
       - ./certs:/app/certs:ro
       - ./logs/users-service:/app/logs
@@ -81,8 +83,8 @@ services:
 
   content-service:
     build:
-      context: ./services/content-service
-      dockerfile: Dockerfile
+      context: ./services
+      dockerfile: content-service/Dockerfile
     ports:
       - "8002:8002"
     environment:
@@ -96,6 +98,7 @@ services:
       # - TLS_CERT_FILE=/app/certs/server.crt
       # - TLS_KEY_FILE=/app/certs/server.key
       - LOG_DIR=/app/logs
+      - JAEGER_ENDPOINT=http://jaeger:14268/api/traces
     volumes:
       - ./certs:/app/certs:ro
       - ./logs/content-service:/app/logs
@@ -137,8 +140,8 @@ services:
 
   ratings-service:
     build:
-      context: ./services/ratings-service
-      dockerfile: Dockerfile
+      context: ./services
+      dockerfile: ratings-service/Dockerfile
     ports:
       - "8003:8003"
     environment:
@@ -150,6 +153,7 @@ services:
       # TLS_CERT_FILE and TLS_KEY_FILE removed for development
       # - TLS_CERT_FILE=/app/certs/server.crt
       # - TLS_KEY_FILE=/app/certs/server.key
+      - JAEGER_ENDPOINT=http://jaeger:14268/api/traces
     volumes:
       - ./certs:/app/certs:ro
     depends_on:
@@ -177,8 +181,8 @@ services:
 
   subscriptions-service:
     build:
-      context: ./services/subscriptions-service
-      dockerfile: Dockerfile
+      context: ./services
+      dockerfile: subscriptions-service/Dockerfile
     ports:
       - "8004:8004"
     environment:
@@ -191,6 +195,7 @@ services:
       # TLS_CERT_FILE and TLS_KEY_FILE removed for development
       # - TLS_CERT_FILE=/app/certs/server.crt
       # - TLS_KEY_FILE=/app/certs/server.key
+      - JAEGER_ENDPOINT=http://jaeger:14268/api/traces
     volumes:
       - ./certs:/app/certs:ro
     depends_on:
@@ -205,8 +210,8 @@ services:
 
   notifications-service:
     build:
-      context: ./services/notifications-service
-      dockerfile: Dockerfile
+      context: ./services
+      dockerfile: notifications-service/Dockerfile
     ports:
       - "8005:8005"
     environment:
@@ -216,6 +221,7 @@ services:
       # TLS_CERT_FILE and TLS_KEY_FILE removed for development
       # - TLS_CERT_FILE=/app/certs/server.crt
       # - TLS_KEY_FILE=/app/certs/server.key
+      - JAEGER_ENDPOINT=http://jaeger:14268/api/traces
     volumes:
       - ./certs:/app/certs:ro
     depends_on:
@@ -256,8 +262,8 @@ services:
 
   recommendation-service:
     build:
-      context: ./services/recommendation-service
-      dockerfile: Dockerfile
+      context: ./services
+      dockerfile: recommendation-service/Dockerfile
     ports:
       - "8006:8006"
     environment:
@@ -271,6 +277,7 @@ services:
       # TLS_CERT_FILE and TLS_KEY_FILE removed for development
       # - TLS_CERT_FILE=/app/certs/server.crt
       # - TLS_KEY_FILE=/app/certs/server.key
+      - JAEGER_ENDPOINT=http://jaeger:14268/api/traces
     volumes:
       - ./certs:/app/certs:ro
     depends_on:
@@ -300,6 +307,18 @@ services:
     ports:
       - "1025:1025"  # SMTP port
       - "8025:8025"  # Web UI port
+    networks:
+      - music-streaming-network
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "14268:14268"  # HTTP collector
+      - "6831:6831/udp"  # UDP agent
+      - "6832:6832/udp"  # UDP agent
+    environment:
+      - COLLECTOR_ZIPKIN_HOST_PORT=:9411
     networks:
       - music-streaming-network
 

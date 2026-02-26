@@ -296,6 +296,26 @@ const AlbumDetail = () => {
                           {song.genre}
                         </span>
                       )}
+                      {/* API Composition: Average Rating and Rating Count */}
+                      {(song.averageRating !== undefined || song.ratingCount !== undefined) && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ fontSize: '14px' }}>⭐</span>
+                          {song.averageRating !== undefined && song.averageRating > 0 ? (
+                            <span style={{ fontSize: '14px', color: '#666' }}>
+                              <strong style={{ color: '#667eea' }}>{song.averageRating.toFixed(1)}</strong>
+                              {song.ratingCount !== undefined && song.ratingCount > 0 && (
+                                <span style={{ marginLeft: '4px', fontSize: '12px', color: '#999' }}>
+                                  ({song.ratingCount})
+                                </span>
+                              )}
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: '12px', color: '#999', fontStyle: 'italic' }}>
+                              Nema ocena
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
 

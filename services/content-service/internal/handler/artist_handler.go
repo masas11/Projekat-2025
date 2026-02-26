@@ -103,9 +103,9 @@ func (h *ArtistHandler) CreateArtist(w http.ResponseWriter, r *http.Request) {
 		Name:     artist.Name,
 		Genres:   artist.Genres,
 	}
-	events.EmitEvent(h.SubscriptionsServiceURL, event)
+	events.EmitEvent(r.Context(), h.SubscriptionsServiceURL, event)
 	// Also emit to recommendation-service
-	events.EmitEvent(h.RecommendationServiceURL, map[string]interface{}{
+	events.EmitEvent(r.Context(), h.RecommendationServiceURL, map[string]interface{}{
 		"type":     "artist_created",
 		"artistId": artist.ID,
 		"name":     artist.Name,
@@ -266,7 +266,7 @@ func (h *ArtistHandler) DeleteArtist(w http.ResponseWriter, r *http.Request) {
 
 	// Emit deletion event to recommendation-service (asynchronous)
 	if artist != nil {
-		events.EmitEvent(h.RecommendationServiceURL, events.DeletedArtistEvent{
+		events.EmitEvent(r.Context(), h.RecommendationServiceURL, events.DeletedArtistEvent{
 			Type:     events.EventTypeDeletedArtist,
 			ArtistID: id,
 		})

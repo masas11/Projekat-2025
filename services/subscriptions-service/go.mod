@@ -5,7 +5,10 @@ go 1.21
 require (
 	github.com/google/uuid v1.3.0
 	go.mongodb.org/mongo-driver v1.12.1
+	shared v0.0.0
 )
+
+replace shared => ../shared
 
 require (
 	github.com/golang/snappy v0.0.1 // indirect

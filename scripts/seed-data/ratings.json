@@ -1,0 +1,277 @@
+﻿[{
+	"_id": {
+		"$oid": "699c5a8c972c439ead8de666"
+	},
+	"userId": "f613665d-83bf-4c6c-bd3b-f712f9b04e84",
+	"songId": "song1",
+	"rating": 5,
+	"createdAt": {
+		"$date": "2026-02-23T13:47:56.24Z"
+	}
+},
+{
+	"_id": {
+		"$oid": "699c5a8c972c439ead8de667"
+	},
+	"userId": "f613665d-83bf-4c6c-bd3b-f712f9b04e84",
+	"songId": "song2",
+	"rating": 4,
+	"createdAt": {
+		"$date": "2026-02-23T13:47:56.24Z"
+	}
+},
+{
+	"_id": {
+		"$oid": "699c5a8c972c439ead8de668"
+	},
+	"userId": "55def55d-fed3-466a-9d6a-ed2b15100411",
+	"songId": "song3",
+	"rating": 5,
+	"createdAt": {
+		"$date": "2026-02-23T13:47:56.24Z"
+	}
+},
+{
+	"_id": {
+		"$oid": "699c5a8c972c439ead8de669"
+	},
+	"userId": "55def55d-fed3-466a-9d6a-ed2b15100411",
+	"songId": "song4",
+	"rating": 4,
+	"createdAt": {
+		"$date": "2026-02-23T13:47:56.24Z"
+	}
+},
+{
+	"_id": "699c71b161ab890629b43052",
+	"songId": "song2",
+	"userId": "b99a83e2-5550-4849-ae0f-77a5697eeb61",
+	"rating": 4,
+	"createdAt": {
+		"$date": "2026-02-23T15:26:41.24Z"
+	},
+	"updatedAt": {
+		"$date": "2026-02-23T15:26:41.24Z"
+	}
+},
+{
+	"_id": "699c71b561ab890629b43054",
+	"songId": "277862dd-45c1-43ed-84a2-878c3039a1ce",
+	"userId": "b99a83e2-5550-4849-ae0f-77a5697eeb61",
+	"rating": 4,
+	"createdAt": {
+		"$date": "2026-02-23T15:26:45.839Z"
+	},
+	"updatedAt": {
+		"$date": "2026-02-23T15:26:45.839Z"
+	}
+},
+{
+	"_id": "699c71c161ab890629b43056",
+	"songId": "d38e585b-5940-48bf-966c-02f06f031a72",
+	"userId": "b99a83e2-5550-4849-ae0f-77a5697eeb61",
+	"rating": 5,
+	"createdAt": {
+		"$date": "2026-02-23T15:26:57.195Z"
+	},
+	"updatedAt": {
+		"$date": "2026-02-23T15:26:57.195Z"
+	}
+},
+{
+	"_id": "699c73e361ab890629b4305a",
+	"songId": "song5",
+	"userId": "a0cfeaa6-6a37-44bb-a794-9ab0678a1214",
+	"rating": 5,
+	"createdAt": {
+		"$date": "2026-02-23T15:36:03.123Z"
+	},
+	"updatedAt": {
+		"$date": "2026-02-23T15:46:54.069Z"
+	}
+},
+{
+	"_id": "699c764561ab890629b4305e",
+	"songId": "d38e585b-5940-48bf-966c-02f06f031a72",
+	"userId": "a0cfeaa6-6a37-44bb-a794-9ab0678a1214",
+	"rating": 5,
+	"createdAt": {
+		"$date": "2026-02-23T15:46:13.226Z"
+	},
+	"updatedAt": {
+		"$date": "2026-02-23T15:46:13.226Z"
+	}
+},
+{
+	"_id": "699c95fd7f0747b1cbea15c3",
+	"songId": "song1",
+	"userId": "b99a83e2-5550-4849-ae0f-77a5697eeb61",
+	"rating": 5,
+	"createdAt": {
+		"$date": "2026-02-23T18:01:33.151Z"
+	},
+	"updatedAt": {
+		"$date": "2026-02-23T18:01:33.151Z"
+	}
+},
+{
+	"_id": "699c967e7f0747b1cbea15c5",
+	"songId": "song3",
+	"userId": "e38d09ed-6233-43b2-b346-72da79c538e0",
+	"rating": 5,
+	"createdAt": {
+		"$date": "2026-02-23T18:03:42.495Z"
+	},
+	"updatedAt": {
+		"$date": "2026-02-23T18:03:42.495Z"
+	}
+},
+{
+	"_id": "699cb6ad4ae91a61f8b9656c",
+	"songId": "9e897c31-7ea6-4df8-8818-ad98c8a43d8b",
+	"userId": "b99a83e2-5550-4849-ae0f-77a5697eeb61",
+	"rating": 3,
+	"createdAt": {
+		"$date": "2026-02-23T20:21:01.418Z"
+	},
+	"updatedAt": {
+		"$date": "2026-02-23T20:21:01.418Z"
+	}
+},
+{
+	"_id": "699cbc5a4ae91a61f8b9656e",
+	"songId": "song4",
+	"userId": "e38d09ed-6233-43b2-b346-72da79c538e0",
+	"rating": 5,
+	"createdAt": {
+		"$date": "2026-02-23T20:45:14.518Z"
+	},
+	"updatedAt": {
+		"$date": "2026-02-23T20:45:14.518Z"
+	}
+},
+{
+	"_id": "699cbc7c4ae91a61f8b96570",
+	"songId": "song4",
+	"userId": "a0cfeaa6-6a37-44bb-a794-9ab0678a1214",
+	"rating": 5,
+	"createdAt": {
+		"$date": "2026-02-23T20:45:48.636Z"
+	},
+	"updatedAt": {
+		"$date": "2026-02-23T20:45:48.636Z"
+	}
+},
+{
+	"_id": "699cbc9d4ae91a61f8b96572",
+	"songId": "song1",
+	"userId": "02a91647-cb94-4279-956e-9cbcc76c9b73",
+	"rating": 5,
+	"createdAt": {
+		"$date": "2026-02-23T20:46:21.901Z"
+	},
+	"updatedAt": {
+		"$date": "2026-02-23T20:46:21.901Z"
+	}
+},
+{
+	"_id": "699cbcba4ae91a61f8b96574",
+	"songId": "song1",
+	"userId": "e38d09ed-6233-43b2-b346-72da79c538e0",
+	"rating": 5,
+	"createdAt": {
+		"$date": "2026-02-23T20:46:50.984Z"
+	},
+	"updatedAt": {
+		"$date": "2026-02-23T20:46:50.984Z"
+	}
+},
+{
+	"_id": {
+		"$oid": "699d87b5f7fa50f0858de666"
+	},
+	"userId": "f613665d-83bf-4c6c-bd3b-f712f9b04e84",
+	"songId": "song1",
+	"rating": 5,
+	"createdAt": {
+		"$date": "2026-02-24T11:12:53.022Z"
+	}
+},
+{
+	"_id": {
+		"$oid": "699d87b5f7fa50f0858de667"
+	},
+	"userId": "f613665d-83bf-4c6c-bd3b-f712f9b04e84",
+	"songId": "song2",
+	"rating": 4,
+	"createdAt": {
+		"$date": "2026-02-24T11:12:53.022Z"
+	}
+},
+{
+	"_id": {
+		"$oid": "699d87b5f7fa50f0858de668"
+	},
+	"userId": "55def55d-fed3-466a-9d6a-ed2b15100411",
+	"songId": "song3",
+	"rating": 5,
+	"createdAt": {
+		"$date": "2026-02-24T11:12:53.022Z"
+	}
+},
+{
+	"_id": {
+		"$oid": "699d87b5f7fa50f0858de669"
+	},
+	"userId": "55def55d-fed3-466a-9d6a-ed2b15100411",
+	"songId": "song4",
+	"rating": 4,
+	"createdAt": {
+		"$date": "2026-02-24T11:12:53.022Z"
+	}
+},
+{
+	"_id": {
+		"$oid": "699d87ef44697403628de666"
+	},
+	"userId": "f613665d-83bf-4c6c-bd3b-f712f9b04e84",
+	"songId": "song1",
+	"rating": 5,
+	"createdAt": {
+		"$date": "2026-02-24T11:13:51.811Z"
+	}
+},
+{
+	"_id": {
+		"$oid": "699d87ef44697403628de667"
+	},
+	"userId": "f613665d-83bf-4c6c-bd3b-f712f9b04e84",
+	"songId": "song2",
+	"rating": 4,
+	"createdAt": {
+		"$date": "2026-02-24T11:13:51.811Z"
+	}
+},
+{
+	"_id": {
+		"$oid": "699d87ef44697403628de668"
+	},
+	"userId": "55def55d-fed3-466a-9d6a-ed2b15100411",
+	"songId": "song3",
+	"rating": 5,
+	"createdAt": {
+		"$date": "2026-02-24T11:13:51.811Z"
+	}
+},
+{
+	"_id": {
+		"$oid": "699d87ef44697403628de669"
+	},
+	"userId": "55def55d-fed3-466a-9d6a-ed2b15100411",
+	"songId": "song4",
+	"rating": 4,
+	"createdAt": {
+		"$date": "2026-02-24T11:13:51.811Z"
+	}
+}]
+

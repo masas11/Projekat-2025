@@ -1,0 +1,90 @@
+﻿[{
+	"_id": "artist1",
+	"name": "Michael Jackson",
+	"biography": "Michael Joseph Jackson was an American singer, songwriter, and dancer. Dubbed the 'King of Pop', he is regarded as one of the most significant cultural figures of the 20th century.",
+	"genres": [
+		"Pop",
+		"R&B",
+		"Soul"
+	],
+	"createdAt": {
+		"$date": "2026-02-23T13:47:53.942Z"
+	}
+},
+{
+	"_id": "artist2",
+	"name": "The Beatles",
+	"biography": "The Beatles were an English rock band, formed in Liverpool in 1960, that comprised John Lennon, Paul McCartney, George Harrison and Ringo Starr.",
+	"genres": [
+		"Rock",
+		"Pop"
+	],
+	"createdAt": {
+		"$date": "2026-02-23T13:47:53.942Z"
+	}
+},
+{
+	"_id": "artist3",
+	"name": "Lady Gaga",
+	"biography": "Stefani Joanne Angelina Germanotta, known professionally as Lady Gaga, is an American singer, songwriter, and actress.",
+	"genres": [
+		"Pop",
+		"Dance",
+		"Electronic"
+	],
+	"createdAt": {
+		"$date": "2026-02-23T13:47:53.942Z"
+	}
+},
+{
+	"_id": "artist4",
+	"name": "The Weeknd",
+	"biography": "Abel Makkonen Tesfaye, known professionally as the Weeknd, is a Canadian singer, songwriter, and record producer.",
+	"genres": [
+		"R&B",
+		"Pop",
+		"Hip-Hop"
+	],
+	"createdAt": {
+		"$date": "2026-02-23T13:47:53.942Z"
+	}
+},
+{
+	"_id": "artist5",
+	"name": "Ed Sheeran",
+	"biography": "Edward Christopher Sheeran MBE is an English singer-songwriter.",
+	"genres": [
+		"Pop",
+		"Folk",
+		"Acoustic"
+	],
+	"createdAt": {
+		"$date": "2026-02-23T13:47:53.942Z"
+	}
+},
+{
+	"_id": "artist6",
+	"name": "To??e Proeski",
+	"biography": "Makedonski pop izvo??a??.",
+	"genres": [
+		"Pop"
+	],
+	"createdAt": {
+		"$date": "2026-02-23T13:47:53.942Z"
+	}
+},
+{
+	"_id": "ef400ca3-04e9-48c5-b902-791b5489de01",
+	"name": "Bon Jovi",
+	"biography": "Ameri─ìki rok bend.",
+	"genres": [
+		"Rock"
+	],
+	"createdAt": {
+		"$date": "2026-02-23T21:01:31.854Z"
+	},
+	"updatedAt": {
+		"$date": "2026-02-23T21:01:31.854Z"
+	}
+}]
+

@@ -1,0 +1,55 @@
+﻿[{
+	"_id": "18768f27-3d6b-453e-aa3e-432ade23fe81",
+	"userId": "b99a83e2-5550-4849-ae0f-77a5697eeb61",
+	"type": "artist",
+	"artistId": "artist4",
+	"createdAt": {
+		"$date": "2026-02-23T13:57:29.127Z"
+	}
+},
+{
+	"_id": "1d52469e-c4f0-4092-9ec1-7e77fe255cc6",
+	"userId": "b99a83e2-5550-4849-ae0f-77a5697eeb61",
+	"type": "genre",
+	"genre": "Pop",
+	"createdAt": {
+		"$date": "2026-02-23T14:33:55.575Z"
+	}
+},
+{
+	"_id": "15e2fdd8-15e8-4d46-b77f-18d2e1b704a4",
+	"userId": "e38d09ed-6233-43b2-b346-72da79c538e0",
+	"type": "genre",
+	"genre": "R&B",
+	"createdAt": {
+		"$date": "2026-02-23T17:17:58.091Z"
+	}
+},
+{
+	"_id": "77074900-fdd2-4618-b2e5-6aad12079b26",
+	"userId": "a0cfeaa6-6a37-44bb-a794-9ab0678a1214",
+	"type": "genre",
+	"genre": "R&B",
+	"createdAt": {
+		"$date": "2026-02-23T17:27:32.541Z"
+	}
+},
+{
+	"_id": "ed52aa7d-5162-4cce-92a4-5e9686aaada5",
+	"userId": "b99a83e2-5550-4849-ae0f-77a5697eeb61",
+	"type": "genre",
+	"genre": "Rock",
+	"createdAt": {
+		"$date": "2026-02-23T18:05:59.579Z"
+	}
+},
+{
+	"_id": "e1d55933-d8bf-4929-8e63-0554496bfc5a",
+	"userId": "02a91647-cb94-4279-956e-9cbcc76c9b73",
+	"type": "genre",
+	"genre": "Rock",
+	"createdAt": {
+		"$date": "2026-02-23T20:59:48.808Z"
+	}
+}]
+

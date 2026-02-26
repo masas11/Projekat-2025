@@ -1,0 +1,272 @@
+﻿[{
+	"_id": "song1",
+	"name": "Billie Jean",
+	"duration": 294,
+	"genre": "Pop",
+	"albumId": "album1",
+	"artistIds": [
+		"artist1"
+	],
+	"audioFileUrl": "/music/Lady-Gaga-Abracadabra.mp3",
+	"createdAt": {
+		"$date": "2026-02-23T13:47:54.436Z"
+	},
+	"updatedAt": {
+		"$date": "2026-02-23T13:47:54.436Z"
+	}
+},
+{
+	"_id": "song2",
+	"name": "Beat It",
+	"duration": 258,
+	"genre": "Pop",
+	"albumId": "album1",
+	"artistIds": [
+		"artist1"
+	],
+	"audioFileUrl": "/music/Lady-Gaga-Abracadabra.mp3",
+	"createdAt": {
+		"$date": "2026-02-23T13:47:54.436Z"
+	},
+	"updatedAt": {
+		"$date": "2026-02-23T13:47:54.436Z"
+	}
+},
+{
+	"_id": "song3",
+	"name": "Come Together",
+	"duration": 259,
+	"genre": "Rock",
+	"albumId": "album2",
+	"artistIds": [
+		"artist2"
+	],
+	"audioFileUrl": "/music/Lady-Gaga-Abracadabra.mp3",
+	"createdAt": {
+		"$date": "2026-02-23T13:47:54.436Z"
+	},
+	"updatedAt": {
+		"$date": "2026-02-23T13:47:54.436Z"
+	}
+},
+{
+	"_id": "song4",
+	"name": "Poker Face",
+	"duration": 238,
+	"genre": "Pop",
+	"albumId": "album3",
+	"artistIds": [
+		"artist3"
+	],
+	"audioFileUrl": "/music/Lady-Gaga-Abracadabra.mp3",
+	"createdAt": {
+		"$date": "2026-02-23T13:47:54.436Z"
+	},
+	"updatedAt": {
+		"$date": "2026-02-23T13:47:54.436Z"
+	}
+},
+{
+	"_id": "song5",
+	"name": "Blinding Lights",
+	"duration": 200,
+	"genre": "R&B",
+	"albumId": "album4",
+	"artistIds": [
+		"artist4"
+	],
+	"audioFileUrl": "/music/Lady-Gaga-Abracadabra.mp3",
+	"createdAt": {
+		"$date": "2026-02-23T13:47:54.436Z"
+	},
+	"updatedAt": {
+		"$date": "2026-02-23T13:47:54.436Z"
+	}
+},
+{
+	"_id": "song6",
+	"name": "Shape of You",
+	"duration": 233,
+	"genre": "Pop",
+	"albumId": "album5",
+	"artistIds": [
+		"artist5"
+	],
+	"audioFileUrl": "/music/Lady-Gaga-Abracadabra.mp3",
+	"createdAt": {
+		"$date": "2026-02-23T13:47:54.436Z"
+	},
+	"updatedAt": {
+		"$date": "2026-02-23T13:47:54.436Z"
+	}
+},
+{
+	"_id": "song7",
+	"name": "Mese??ina",
+	"duration": 182,
+	"genre": "Pop",
+	"albumId": "album6",
+	"artistIds": [
+		"artist6"
+	],
+	"audioFileUrl": "/music/Mesecina.mp3",
+	"createdAt": {
+		"$date": "2026-02-23T13:47:54.436Z"
+	},
+	"updatedAt": {
+		"$date": "2026-02-23T13:47:54.436Z"
+	}
+},
+{
+	"_id": "d38e585b-5940-48bf-966c-02f06f031a72",
+	"name": "Sao Paolo",
+	"duration": 220,
+	"genre": "R&B",
+	"albumId": "album4",
+	"artistIds": [
+		"artist4"
+	],
+	"audioFileUrl": "/music/Mesecina.mp3",
+	"createdAt": {
+		"$date": "2026-02-23T14:11:42.966Z"
+	},
+	"updatedAt": {
+		"$date": "2026-02-23T14:11:42.966Z"
+	}
+},
+{
+	"_id": "277862dd-45c1-43ed-84a2-878c3039a1ce",
+	"name": "After Hours",
+	"duration": 190,
+	"genre": "Pop",
+	"albumId": "album4",
+	"artistIds": [
+		"artist4"
+	],
+	"audioFileUrl": "/music/Mesecina.mp3",
+	"createdAt": {
+		"$date": "2026-02-23T14:16:02.73Z"
+	},
+	"updatedAt": {
+		"$date": "2026-02-23T14:16:02.73Z"
+	}
+},
+{
+	"_id": "68fc0e17-ae10-4459-be37-190e0b2cccfb",
+	"name": "Lose ti stoji",
+	"duration": 210,
+	"genre": "Pop",
+	"albumId": "album6",
+	"artistIds": [
+		"artist6"
+	],
+	"audioFileUrl": "/music/Mesecina.mp3",
+	"createdAt": {
+		"$date": "2026-02-23T14:17:34.498Z"
+	},
+	"updatedAt": {
+		"$date": "2026-02-23T14:17:34.498Z"
+	}
+},
+{
+	"_id": "a0da1c53-9136-4a8a-a10a-181927d758e7",
+	"name": "Pratim te",
+	"duration": 220,
+	"genre": "Pop",
+	"albumId": "album6",
+	"artistIds": [
+		"artist6"
+	],
+	"audioFileUrl": "/music/Mesecina.mp3",
+	"createdAt": {
+		"$date": "2026-02-23T14:22:24.578Z"
+	},
+	"updatedAt": {
+		"$date": "2026-02-23T14:22:24.578Z"
+	}
+},
+{
+	"_id": "d7ae9554-4379-4c48-ac24-857b1485270e",
+	"name": "Soba za tugu",
+	"duration": 210,
+	"genre": "Pop",
+	"albumId": "album6",
+	"artistIds": [
+		"artist6"
+	],
+	"audioFileUrl": "/music/Mesecina.mp3",
+	"createdAt": {
+		"$date": "2026-02-23T14:34:53.173Z"
+	},
+	"updatedAt": {
+		"$date": "2026-02-23T14:34:53.173Z"
+	}
+},
+{
+	"_id": "9e897c31-7ea6-4df8-8818-ad98c8a43d8b",
+	"name": "Zao mi je",
+	"duration": 190,
+	"genre": "Pop",
+	"albumId": "album6",
+	"artistIds": [
+		"artist6"
+	],
+	"audioFileUrl": "/music/Mesecina.mp3",
+	"createdAt": {
+		"$date": "2026-02-23T14:39:23.576Z"
+	},
+	"updatedAt": {
+		"$date": "2026-02-23T14:39:23.576Z"
+	}
+},
+{
+	"_id": "6da20be0-fc46-45d5-b7cc-080c441ec6a6",
+	"name": "Rane na usnama",
+	"duration": 210,
+	"genre": "Pop",
+	"albumId": "album6",
+	"artistIds": [
+		"artist6"
+	],
+	"createdAt": {
+		"$date": "2026-02-23T14:45:00.639Z"
+	},
+	"updatedAt": {
+		"$date": "2026-02-23T14:45:00.639Z"
+	}
+},
+{
+	"_id": "0f056b0b-4a74-478b-8c75-cca6d0e05f9a",
+	"name": "Ubijas me usnama",
+	"duration": 170,
+	"genre": "Pop",
+	"albumId": "album6",
+	"artistIds": [
+		"artist6"
+	],
+	"audioFileUrl": "/music/Mesecina.mp3",
+	"createdAt": {
+		"$date": "2026-02-23T14:50:52.069Z"
+	},
+	"updatedAt": {
+		"$date": "2026-02-23T14:50:52.069Z"
+	}
+},
+{
+	"_id": "fcffb02a-e544-4aa7-83bb-13d8ad486b17",
+	"name": "Bed of Roses",
+	"duration": 270,
+	"genre": "Rock",
+	"albumId": "e06ea550-2abf-408e-884e-3badd418067f",
+	"artistIds": [
+		"ef400ca3-04e9-48c5-b902-791b5489de01"
+	],
+	"audioFileUrl": "/music/Mesecina.mp3",
+	"createdAt": {
+		"$date": "2026-02-23T22:18:16.653Z"
+	},
+	"updatedAt": {
+		"$date": "2026-02-23T22:18:16.653Z"
+	}
+}]
+

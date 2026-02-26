@@ -1,0 +1,122 @@
+﻿[{
+	"_id": "album1",
+	"name": "Thriller",
+	"releaseDate": {
+		"$date": "1982-11-30T00:00:00Z"
+	},
+	"genre": "Pop",
+	"artistIds": [
+		"artist1"
+	],
+	"createdAt": {
+		"$date": "2026-02-23T13:47:54.152Z"
+	},
+	"updatedAt": {
+		"$date": "2026-02-23T13:47:54.152Z"
+	}
+},
+{
+	"_id": "album2",
+	"name": "Abbey Road",
+	"releaseDate": {
+		"$date": {
+			"$numberLong": "-8380800000"
+		}
+	},
+	"genre": "Rock",
+	"artistIds": [
+		"artist2"
+	],
+	"createdAt": {
+		"$date": "2026-02-23T13:47:54.153Z"
+	},
+	"updatedAt": {
+		"$date": "2026-02-23T13:47:54.153Z"
+	}
+},
+{
+	"_id": "album3",
+	"name": "The Fame",
+	"releaseDate": {
+		"$date": "2008-08-19T00:00:00Z"
+	},
+	"genre": "Pop",
+	"artistIds": [
+		"artist3"
+	],
+	"createdAt": {
+		"$date": "2026-02-23T13:47:54.153Z"
+	},
+	"updatedAt": {
+		"$date": "2026-02-23T13:47:54.153Z"
+	}
+},
+{
+	"_id": "album4",
+	"name": "After Hours",
+	"releaseDate": {
+		"$date": "2020-03-20T00:00:00Z"
+	},
+	"genre": "R&B",
+	"artistIds": [
+		"artist4"
+	],
+	"createdAt": {
+		"$date": "2026-02-23T13:47:54.153Z"
+	},
+	"updatedAt": {
+		"$date": "2026-02-23T13:47:54.153Z"
+	}
+},
+{
+	"_id": "album5",
+	"name": "?? (Divide)",
+	"releaseDate": {
+		"$date": "2017-03-03T00:00:00Z"
+	},
+	"genre": "Pop",
+	"artistIds": [
+		"artist5"
+	],
+	"createdAt": {
+		"$date": "2026-02-23T13:47:54.153Z"
+	},
+	"updatedAt": {
+		"$date": "2026-02-23T13:47:54.153Z"
+	}
+},
+{
+	"_id": "album6",
+	"name": "Ledena",
+	"releaseDate": {
+		"$date": "2001-12-01T00:00:00Z"
+	},
+	"genre": "Pop",
+	"artistIds": [
+		"artist6"
+	],
+	"createdAt": {
+		"$date": "2026-02-23T13:47:54.153Z"
+	},
+	"updatedAt": {
+		"$date": "2026-02-23T13:47:54.153Z"
+	}
+},
+{
+	"_id": "e06ea550-2abf-408e-884e-3badd418067f",
+	"name": "Forever",
+	"releaseDate": {
+		"$date": "1986-11-11T00:00:00Z"
+	},
+	"genre": "Rock",
+	"artistIds": [
+		"ef400ca3-04e9-48c5-b902-791b5489de01"
+	],
+	"createdAt": {
+		"$date": "2026-02-23T22:17:33.642Z"
+	},
+	"updatedAt": {
+		"$date": "2026-02-23T22:17:33.642Z"
+	}
+}]
+

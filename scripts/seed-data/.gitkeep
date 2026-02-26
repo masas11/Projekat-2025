@@ -1,0 +1,2 @@
+# Ovaj folder sadrži eksportovane JSON podatke koji se commit-uju u git
+# Koristite export-data.ps1 za eksport i import-data.ps1 za import

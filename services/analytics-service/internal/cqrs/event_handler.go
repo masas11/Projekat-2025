@@ -30,12 +30,14 @@ func NewEventHandler(projectionStore *store.ProjectionStore, cfg *config.Config)
 // HandleEvent processes an event and updates the read model (projection)
 // It checks the last processed event version to avoid processing the same event multiple times
 func (eh *EventHandler) HandleEvent(ctx context.Context, event *model.UserEvent) error {
-	// Check if this event has already been processed
+	// CRITICAL: Check if this event has already been processed to prevent duplicate counting
 	projection, err := eh.projectionStore.GetProjection(ctx, event.StreamID)
 	if err == nil && projection != nil {
 		// If event version is less than or equal to last processed version, skip it
 		if event.Version > 0 && event.Version <= projection.LastProcessedEventVersion {
-			// Event already processed, skip
+			// Event already processed, skip to prevent duplicate counting
+			log.Printf("Skipping already processed event: streamId=%s, eventType=%s, version=%d (lastProcessed=%d)", 
+				event.StreamID, event.EventType, event.Version, projection.LastProcessedEventVersion)
 			return nil
 		}
 	}
@@ -56,8 +58,11 @@ func (eh *EventHandler) HandleEvent(ctx context.Context, event *model.UserEvent)
 	}
 	
 	// Update last processed event version if processing was successful
+	// This MUST be done to prevent reprocessing the same event
 	if handleErr == nil && event.Version > 0 {
-		eh.projectionStore.UpdateLastProcessedEventVersion(ctx, event.StreamID, event.Version)
+		if err := eh.projectionStore.UpdateLastProcessedEventVersion(ctx, event.StreamID, event.Version); err != nil {
+			log.Printf("Warning: Failed to update last processed event version: %v", err)
+		}
 	}
 	
 	return handleErr

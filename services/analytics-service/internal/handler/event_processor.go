@@ -7,7 +7,6 @@ import (
 
 	"analytics-service/config"
 	"analytics-service/internal/cqrs"
-	"analytics-service/internal/model"
 	"analytics-service/internal/store"
 )
 
@@ -35,52 +34,14 @@ func StartEventProcessor(ctx context.Context, eventStore *store.EventStore, even
 }
 
 // processNewEvents processes new events from the event store and updates projections
-// It tracks the last processed event version per user to avoid processing the same events multiple times
-// NOTE: Events are already processed synchronously in LogActivity, so this is mainly a catch-up mechanism
-func processNewEvents(ctx context.Context, eventStore *store.EventStore, eventHandler *cqrs.EventHandler) {
-	// This function is called periodically to catch up on any missed events
-	// The main event processing happens synchronously in LogActivity when events are created
-	// We only process events from the last 1 minute to catch any that might have been missed
+// DISABLED: Events are already processed synchronously in LogActivity when they are created.
+// This background processor was causing duplicate event processing and incorrect analytics counts.
+// If we need to catch up on missed events, we can enable this with proper version checking.
+func processNewEvents(ctx context.Context, _ *store.EventStore, _ *cqrs.EventHandler) {
+	// DISABLED: Events are already processed synchronously in LogActivity when they are created.
+	// This background processor was causing duplicate event processing and incorrect analytics counts.
+	// If we need to catch up on missed events, we can enable this with proper version checking.
 	
-	log.Println("Event processor tick - checking for missed events (last 1 minute only)")
-	
-	// Only process events from the last 1 minute to avoid reprocessing old events
-	cutoffTime := time.Now().Add(-1 * time.Minute)
-	
-	// Get recent events of each type
-	eventTypes := []model.EventType{
-		model.EventTypeSongPlayed,
-		model.EventTypeRatingGiven,
-		model.EventTypeArtistSubscribed,
-		model.EventTypeArtistUnsubscribed,
-	}
-
-	processedCount := 0
-	
-	for _, eventType := range eventTypes {
-		events, err := eventStore.GetEventsByType(ctx, eventType, 50) // Get last 50 events of each type
-		if err != nil {
-			log.Printf("Error getting events by type %s: %v", eventType, err)
-			continue
-		}
-
-		// Process only very recent events (last 1 minute) that haven't been processed yet
-		// The EventHandler will check LastProcessedEventVersion to skip already processed events
-		for _, event := range events {
-			if event.Timestamp.Before(cutoffTime) {
-				continue // Skip old events
-			}
-			
-			// EventHandler will check LastProcessedEventVersion internally and skip if already processed
-			if err := eventHandler.HandleEvent(ctx, event); err != nil {
-				log.Printf("Error handling event %s for user %s (version %d): %v", event.EventType, event.StreamID, event.Version, err)
-			} else {
-				processedCount++
-			}
-		}
-	}
-
-	if processedCount > 0 {
-		log.Printf("Processed %d new events and updated projections", processedCount)
-	}
+	// Do nothing - events are processed synchronously in LogActivity
+	return
 }

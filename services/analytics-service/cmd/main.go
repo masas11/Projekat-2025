@@ -46,11 +46,20 @@ func main() {
 
 	db := mongoClient.Database(cfg.MongoDBDatabase)
 	activityStore := store.NewActivityStore(db)
-	eventStore := store.NewEventStore(db) // Event Sourcing (2.14)
-	activityHandler := handler.NewActivityHandler(activityStore, eventStore, cfg)
+	eventStore := store.NewEventStore(db)        // Event Sourcing (2.14)
+	projectionStore := store.NewProjectionStore(db) // CQRS Read Model (2.15)
+	activityHandler := handler.NewActivityHandler(activityStore, eventStore, projectionStore, cfg)
 
 	log.Printf("Connected to MongoDB at %s, database: %s", cfg.MongoDBURI, cfg.MongoDBDatabase)
 	log.Println("Event Store initialized for Event Sourcing (2.14)")
+	log.Println("Projection Store initialized for CQRS Read Model (2.15)")
+
+	// Start background worker to process events and update projections (2.15 CQRS)
+	// Use a background context that doesn't get cancelled
+	bgCtx := context.Background()
+	eventHandler := handler.NewEventHandler(projectionStore, cfg)
+	go handler.StartEventProcessor(bgCtx, eventStore, eventHandler)
+	log.Println("Event processor started for CQRS (2.15)")
 
 	// Setup routes
 	mux := http.NewServeMux()

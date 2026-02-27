@@ -11,21 +11,31 @@ import (
 	"time"
 
 	"analytics-service/config"
+	"analytics-service/internal/cqrs"
 	"analytics-service/internal/model"
 	"analytics-service/internal/store"
 )
 
 type ActivityHandler struct {
-	ActivityStore *store.ActivityStore // For backward compatibility
-	EventStore    *store.EventStore    // Event Sourcing (2.14)
-	Config        *config.Config
+	ActivityStore  *store.ActivityStore  // For backward compatibility
+	EventStore     *store.EventStore     // Event Sourcing (2.14)
+	ProjectionStore *store.ProjectionStore // CQRS Read Model (2.15)
+	CommandHandler *cqrs.CommandHandler  // CQRS Command Handler (2.15)
+	QueryHandler   *cqrs.QueryHandler    // CQRS Query Handler (2.15)
+	Config         *config.Config
 }
 
-func NewActivityHandler(activityStore *store.ActivityStore, eventStore *store.EventStore, cfg *config.Config) *ActivityHandler {
+func NewActivityHandler(activityStore *store.ActivityStore, eventStore *store.EventStore, projectionStore *store.ProjectionStore, cfg *config.Config) *ActivityHandler {
+	commandHandler := cqrs.NewCommandHandler(eventStore)
+	queryHandler := cqrs.NewQueryHandler(projectionStore, cfg)
+	
 	return &ActivityHandler{
-		ActivityStore: activityStore,
-		EventStore:    eventStore,
-		Config:        cfg,
+		ActivityStore:  activityStore,
+		EventStore:     eventStore,
+		ProjectionStore: projectionStore,
+		CommandHandler: commandHandler,
+		QueryHandler:   queryHandler,
+		Config:         cfg,
 	}
 }
 
@@ -64,17 +74,49 @@ func (h *ActivityHandler) LogActivity(w http.ResponseWriter, r *http.Request) {
 	if h.ActivityStore != nil {
 		if err := h.ActivityStore.Create(ctx, &activity); err != nil {
 			log.Printf("Error logging activity to ActivityStore: %v", err)
+		} else {
+			log.Printf("Activity stored successfully in ActivityStore: type=%s, userId=%s", activity.Type, activity.UserID)
 		}
 	}
 
-	// Store as event in Event Store (2.14 Event Sourcing)
-	if h.EventStore != nil {
+	// Store as event in Event Store using CQRS Command Handler (2.15)
+	if h.CommandHandler != nil {
+		cmd := h.activityToCommand(&activity)
+		if cmd != nil {
+			result := h.CommandHandler.HandleCommand(ctx, cmd)
+			if !result.Success {
+				log.Printf("Error handling command: %v", result.Error)
+				// Fallback to direct event store append
+				if h.EventStore != nil {
+					event := h.activityToEvent(&activity)
+					if err := h.EventStore.AppendEvent(ctx, event); err != nil {
+						log.Printf("Error appending event to EventStore: %v", err)
+					}
+				}
+			} else {
+				log.Printf("Command handled successfully via CQRS: streamId=%s, eventType=%s", result.Event.StreamID, result.Event.EventType)
+				// Process event immediately to update projection (synchronous for now)
+				if h.ProjectionStore != nil {
+					eventHandler := cqrs.NewEventHandler(h.ProjectionStore, h.Config)
+					if err := eventHandler.HandleEvent(ctx, result.Event); err != nil {
+						log.Printf("Error processing event for projection: %v", err)
+					}
+				}
+			}
+		} else {
+			// Fallback to direct event store append if command conversion fails
+			if h.EventStore != nil {
+				event := h.activityToEvent(&activity)
+				if err := h.EventStore.AppendEvent(ctx, event); err != nil {
+					log.Printf("Error appending event to EventStore: %v", err)
+				}
+			}
+		}
+	} else if h.EventStore != nil {
+		// Fallback if command handler is not available
 		event := h.activityToEvent(&activity)
 		if err := h.EventStore.AppendEvent(ctx, event); err != nil {
 			log.Printf("Error appending event to EventStore: %v", err)
-			// Don't fail the request if event store fails, but log it
-		} else {
-			log.Printf("Event appended successfully: streamId=%s, eventType=%s, version=%d", event.StreamID, event.EventType, event.Version)
 		}
 	}
 
@@ -130,6 +172,47 @@ func (h *ActivityHandler) GetUserActivities(w http.ResponseWriter, r *http.Reque
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(activities); err != nil {
 		log.Printf("Error encoding activities: %v", err)
+	}
+}
+
+// activityToCommand converts UserActivity to CQRS Command (2.15)
+func (h *ActivityHandler) activityToCommand(activity *model.UserActivity) cqrs.Command {
+	switch model.ActivityType(activity.Type) {
+	case model.ActivityTypeSongPlayed:
+		artistIDs := []string{}
+		if activity.ArtistID != "" {
+			artistIDs = append(artistIDs, activity.ArtistID)
+		}
+		return &cqrs.PlaySongCommand{
+			UserID:    activity.UserID,
+			SongID:    activity.SongID,
+			SongName:  activity.SongName,
+			Genre:     activity.Genre,
+			ArtistIDs: artistIDs,
+			Timestamp: activity.Timestamp,
+		}
+	case model.ActivityTypeRatingGiven:
+		return &cqrs.RateSongCommand{
+			UserID:    activity.UserID,
+			SongID:    activity.SongID,
+			Rating:    activity.Rating,
+			Timestamp: activity.Timestamp,
+		}
+	case model.ActivityTypeArtistSubscribed:
+		return &cqrs.SubscribeToArtistCommand{
+			UserID:     activity.UserID,
+			ArtistID:   activity.ArtistID,
+			ArtistName: activity.ArtistName,
+			Timestamp:  activity.Timestamp,
+		}
+	case model.ActivityTypeArtistUnsubscribed:
+		return &cqrs.UnsubscribeFromArtistCommand{
+			UserID:    activity.UserID,
+			ArtistID:  activity.ArtistID,
+			Timestamp: activity.Timestamp,
+		}
+	default:
+		return nil
 	}
 }
 
@@ -244,8 +327,87 @@ func (h *ActivityHandler) ReplayEvents(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// GetUserAnalytics calculates and returns analytics for a user
+// GetUserAnalytics returns analytics for a user using CQRS Query Side (2.15)
 func (h *ActivityHandler) GetUserAnalytics(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	userID := r.URL.Query().Get("userId")
+	if userID == "" {
+		http.Error(w, "userId parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	// Use CQRS Query Handler to read from read model (projection)
+	query := &cqrs.GetUserAnalyticsQuery{
+		UserID: userID,
+	}
+	
+	result := h.QueryHandler.HandleQuery(ctx, query)
+	if result.Error != nil {
+		log.Printf("Error getting analytics from query handler: %v", result.Error)
+		// Fallback to old method if query handler fails
+		h.GetUserAnalyticsLegacy(w, r)
+		return
+	}
+
+	if result.Analytics == nil {
+		// If projection is empty, try to rebuild from events or use legacy method
+		log.Printf("Projection is empty for user %s, trying legacy method", userID)
+		h.GetUserAnalyticsLegacy(w, r)
+		return
+	}
+
+	// Check if projection has any data - if not, try to rebuild from events or use legacy method
+	if result.Analytics.TotalSongsPlayed == 0 {
+		log.Printf("Projection has no songs played for user %s, checking events and activities", userID)
+		
+		// Try to rebuild projection from events first
+		if h.EventStore != nil {
+			events, err := h.EventStore.GetEventStream(ctx, userID, 0, 0)
+			if err == nil && len(events) > 0 {
+				log.Printf("Found %d events for user %s, processing to update projection", len(events), userID)
+				// Process events to update projection
+				eventHandler := cqrs.NewEventHandler(h.ProjectionStore, h.Config)
+				for _, event := range events {
+					if err := eventHandler.HandleEvent(ctx, event); err != nil {
+						log.Printf("Error processing event for projection: %v", err)
+					}
+				}
+				// Try query again
+				result = h.QueryHandler.HandleQuery(ctx, query)
+				if result.Analytics != nil && result.Analytics.TotalSongsPlayed > 0 {
+					log.Printf("Projection updated successfully, returning analytics")
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusOK)
+					if err := json.NewEncoder(w).Encode(result.Analytics); err != nil {
+						log.Printf("Error encoding analytics: %v", err)
+					}
+					return
+				}
+			}
+		}
+		
+		// If still no data, use legacy method which reads from ActivityStore
+		log.Printf("No data in projection or events, using legacy method for user %s", userID)
+		h.GetUserAnalyticsLegacy(w, r)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(result.Analytics); err != nil {
+		log.Printf("Error encoding analytics: %v", err)
+	}
+}
+
+// GetUserAnalyticsLegacy is the old implementation (kept for backward compatibility)
+func (h *ActivityHandler) GetUserAnalyticsLegacy(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return

@@ -497,12 +497,60 @@ func (h *SongHandler) StreamSong(w http.ResponseWriter, r *http.Request) {
 	// Try to get userID from JWT token (optional auth)
 	claims, ok := r.Context().Value(middleware.UserContextKey).(*middleware.UserClaims)
 	if ok && claims != nil && claims.UserID != "" {
-		analytics.LogActivity(h.AnalyticsServiceURL, analytics.Activity{
-			UserID:   claims.UserID,
-			Type:     analytics.ActivityTypeSongPlayed,
-			SongID:   id,
-			SongName: song.Name,
-		})
+		// Deduplication: Check if we already logged this activity recently (within 5 minutes)
+		// This prevents multiple log entries for the same song play (e.g., from preload, range requests, etc.)
+		activityKey := fmt.Sprintf("activity:%s:%s", claims.UserID, id)
+		shouldLog := true
+		
+		if h.RedisCache != nil {
+			ctx := r.Context()
+			exists, err := h.RedisCache.Client().Exists(ctx, activityKey).Result()
+			if err == nil && exists > 0 {
+				// Activity already logged recently, skip
+				shouldLog = false
+				log.Printf("Skipping duplicate activity log for user %s, song %s (deduplication)", claims.UserID, id)
+			}
+		}
+		
+		if shouldLog {
+			// Get artist names for the activity log
+			artistNames := make(map[string]string)
+			if len(song.ArtistIDs) > 0 && h.ArtistRepo != nil {
+				for _, artistID := range song.ArtistIDs {
+					if artistID != "" {
+						artist, err := h.ArtistRepo.GetByID(r.Context(), artistID)
+						if err == nil && artist != nil {
+							artistNames[artistID] = artist.Name
+						}
+					}
+				}
+			}
+			
+			// Log activity with all available data
+			activity := analytics.Activity{
+				UserID:   claims.UserID,
+				Type:     analytics.ActivityTypeSongPlayed,
+				SongID:   id,
+				SongName: song.Name,
+				Genre:    song.Genre,
+			}
+			
+			// Add first artist ID and name if available (for backward compatibility)
+			if len(song.ArtistIDs) > 0 {
+				activity.ArtistID = song.ArtistIDs[0]
+				if name, ok := artistNames[song.ArtistIDs[0]]; ok {
+					activity.ArtistName = name
+				}
+			}
+			
+			analytics.LogActivity(h.AnalyticsServiceURL, activity)
+			
+			// Set deduplication key in Redis (expires after 5 minutes to prevent duplicate processing)
+			if h.RedisCache != nil {
+				ctx := r.Context()
+				h.RedisCache.Client().Set(ctx, activityKey, "1", 5*time.Minute)
+			}
+		}
 	}
 
 	// Increment play count in Redis cache (2.12)

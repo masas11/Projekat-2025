@@ -153,3 +153,8 @@ type MostPlayedSong struct {
 	SongID string `json:"songId"`
 	Count  int    `json:"count"`
 }
+
+// Client returns the underlying Redis client (for advanced operations)
+func (c *RedisCache) Client() *redis.Client {
+	return c.client
+}

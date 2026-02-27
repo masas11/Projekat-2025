@@ -98,6 +98,7 @@ services:
       - RATINGS_SERVICE_URL=http://ratings-service:8003
       - ANALYTICS_SERVICE_URL=http://analytics-service:8007
       - HDFS_NAMENODE_URL=http://hdfs-namenode:9870
+      - REDIS_URL=redis:6379
       # TLS_CERT_FILE and TLS_KEY_FILE removed for development
       # - TLS_CERT_FILE=/app/certs/server.crt
       # - TLS_KEY_FILE=/app/certs/server.key
@@ -110,6 +111,8 @@ services:
       mongodb-content:
         condition: service_started
       hdfs-namenode:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - music-streaming-network
@@ -391,6 +394,22 @@ services:
     depends_on:
       hdfs-namenode:
         condition: service_healthy
+    networks:
+      - music-streaming-network
+
+  # Redis (2.12) - Caching most played songs
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./data/redis:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
     networks:
       - music-streaming-network
 

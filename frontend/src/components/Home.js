@@ -1,12 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import api from '../services/api';
 
 const Home = () => {
   const { isAuthenticated, user } = useAuth();
   const location = useLocation();
   const [recommendations, setRecommendations] = useState(null);
+  const [mostPlayedSongs, setMostPlayedSongs] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [loadingMostPlayed, setLoadingMostPlayed] = useState(false);
   const [error, setError] = useState(null);
 
   const fetchRecommendations = useCallback(async () => {
@@ -77,6 +80,26 @@ const Home = () => {
     window.addEventListener('focus', handleFocus);
     return () => window.removeEventListener('focus', handleFocus);
   }, [isAuthenticated, user, fetchRecommendations]);
+
+  // Fetch most played songs (2.12) - available for all users
+  useEffect(() => {
+    const fetchMostPlayed = async () => {
+      setLoadingMostPlayed(true);
+      try {
+        console.log('Fetching most played songs...');
+        const songs = await api.getMostPlayedSongs(10);
+        console.log('Most played songs received:', songs);
+        setMostPlayedSongs(Array.isArray(songs) ? songs : []);
+        console.log('Most played songs state set to:', Array.isArray(songs) ? songs : []);
+      } catch (err) {
+        console.error('Error fetching most played songs:', err);
+        setMostPlayedSongs([]); // Set empty array on error
+      } finally {
+        setLoadingMostPlayed(false);
+      }
+    };
+    fetchMostPlayed();
+  }, []);
 
   const SongCard = ({ song, reason }) => (
     <div className="song-card-modern" style={{
@@ -384,6 +407,84 @@ const Home = () => {
             </div>
           </div>
 
+          {/* Most Played Songs Section (2.12) - shown to ALL users */}
+          {mostPlayedSongs.length > 0 && (
+            <div style={{
+              background: 'linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.9) 100%)',
+              backdropFilter: 'blur(10px)',
+              borderRadius: '20px',
+              padding: '40px',
+              marginBottom: '40px',
+              boxShadow: '0 10px 40px rgba(0,0,0,0.1)',
+              border: '1px solid rgba(255,255,255,0.3)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '30px' }}>
+                <div style={{ fontSize: '40px' }}>🔥</div>
+                <h2 style={{ margin: 0, fontSize: '28px', fontWeight: '700', color: '#333' }}>
+                  Najslušanije pesme
+                </h2>
+              </div>
+              {loadingMostPlayed ? (
+                <div style={{ textAlign: 'center', padding: '20px' }}>
+                  <p>Učitavanje...</p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {mostPlayedSongs.map((song, index) => (
+                    <div
+                      key={song.id}
+                      style={{
+                        padding: '16px',
+                        background: 'linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.9) 100%)',
+                        borderRadius: '12px',
+                        border: '1px solid rgba(102, 126, 234, 0.2)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '16px',
+                        cursor: 'pointer',
+                        transition: 'all 0.3s ease',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.transform = 'translateX(4px)';
+                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(102, 126, 234, 0.2)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = 'translateX(0)';
+                        e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
+                      }}
+                      onClick={() => window.location.href = `/songs/${song.id}`}
+                    >
+                      <div style={{
+                        width: '50px',
+                        height: '50px',
+                        borderRadius: '10px',
+                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'white',
+                        fontWeight: '700',
+                        fontSize: '18px',
+                        flexShrink: 0
+                      }}>
+                        {index + 1}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: '600', fontSize: '16px', color: '#333', marginBottom: '4px' }}>
+                          {song.name}
+                        </div>
+                        <div style={{ fontSize: '14px', color: '#666' }}>
+                          {song.genre} • {song.playCount} puštanja
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Admin Panel */}
           {user?.username === 'admin' && (
             <div style={{
@@ -472,6 +573,7 @@ const Home = () => {
                   </button>
                 </div>
               )}
+
 
               {recommendations && (
                 <>

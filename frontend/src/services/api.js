@@ -269,6 +269,11 @@ class ApiService {
     return `${this.baseURL}/api/content/songs/${songId}/stream`;
   }
 
+  // Get most played songs (2.12)
+  async getMostPlayedSongs(limit = 10) {
+    return this.request(`/api/content/songs/most-played?limit=${limit}`);
+  }
+
   // Analytics Service (1.15)
   // Direktno pozivamo analytics-service jer API Gateway trenutno ne prosleđuje podatke ispravno
   async getUserActivities(limit = 50, type = null, userId) {

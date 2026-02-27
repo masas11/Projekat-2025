@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -636,6 +635,20 @@ func main() {
 		}
 	}))
 
+	// GET /api/content/songs/most-played?limit={n} - get most played songs (2.12)
+	mux.HandleFunc("/api/content/songs/most-played", globalRateLimit(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			enableCORS(w, r)
+			proxyRequest(w, r, cfg.ContentServiceURL+"/songs/most-played", appLogger)
+		} else if r.Method == "OPTIONS" {
+			enableCORS(w, r)
+			w.WriteHeader(http.StatusOK)
+		} else {
+			enableCORS(w, r)
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	}))
+
 	// GET /api/content/songs - get all songs with ratings (API Composition)
 	// POST /api/content/songs - create song (admin only)
 	mux.HandleFunc("/api/content/songs", globalRateLimit(middleware.OptionalAuth(cfg, appLogger)(func(w http.ResponseWriter, r *http.Request) {
@@ -883,13 +896,13 @@ func main() {
 		// Get userId from JWT token
 		claims, ok := r.Context().Value(middleware.UserContextKey).(*middleware.UserClaims)
 		if !ok || claims == nil {
-			appLogger.LogError("analytics", "Failed to get user claims from context")
+			log.Printf("Failed to get user claims from context")
 			enableCORS(w, r)
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
 
-		appLogger.LogInfo("analytics", fmt.Sprintf("Getting activities for user: %s", claims.UserID))
+		log.Printf("Getting activities for user: %s", claims.UserID)
 
 		// Add userId from JWT token to query params
 		query := r.URL.RawQuery
@@ -901,7 +914,7 @@ func main() {
 
 		// Create new request with updated query
 		targetURL := cfg.AnalyticsServiceURL + "/activities?" + query
-		appLogger.LogInfo("analytics", fmt.Sprintf("Proxying request to: %s", targetURL))
+		log.Printf("Proxying analytics activities request to: %s", targetURL)
 		proxyRequest(w, r, targetURL, appLogger)
 	})))
 

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"content-service/internal/cache"
 	"content-service/internal/dto"
 	"content-service/internal/events"
 	"content-service/internal/logger"
@@ -39,9 +40,10 @@ type SongHandler struct {
 	AnalyticsServiceURL      string
 	Logger                   *logger.Logger
 	HDFSClient               *storage.HDFSClient
+	RedisCache               *cache.RedisCache // (2.12)
 }
 
-func NewSongHandler(repo *store.SongRepository, albumRepo *store.AlbumRepository, artistRepo *store.ArtistRepository, subscriptionsServiceURL, recommendationServiceURL, ratingsServiceURL, analyticsServiceURL string, log *logger.Logger, hdfsClient *storage.HDFSClient) *SongHandler {
+func NewSongHandler(repo *store.SongRepository, albumRepo *store.AlbumRepository, artistRepo *store.ArtistRepository, subscriptionsServiceURL, recommendationServiceURL, ratingsServiceURL, analyticsServiceURL string, log *logger.Logger, hdfsClient *storage.HDFSClient, redisCache *cache.RedisCache) *SongHandler {
 	return &SongHandler{
 		Repo:                     repo,
 		AlbumRepo:                albumRepo,
@@ -52,6 +54,7 @@ func NewSongHandler(repo *store.SongRepository, albumRepo *store.AlbumRepository
 		AnalyticsServiceURL:      analyticsServiceURL,
 		Logger:                   log,
 		HDFSClient:               hdfsClient,
+		RedisCache:               redisCache,
 	}
 }
 
@@ -439,6 +442,15 @@ func (h *SongHandler) StreamSong(w http.ResponseWriter, r *http.Request) {
 			SongID:   id,
 			SongName: song.Name,
 		})
+	}
+
+	// Increment play count in Redis cache (2.12)
+	if h.RedisCache != nil {
+		ctx := r.Context()
+		if err := h.RedisCache.IncrementPlayCount(ctx, id); err != nil {
+			log.Printf("Failed to increment play count for song %s: %v", id, err)
+			// Don't fail the request if cache update fails
+		}
 	}
 
 	// Set headers for audio streaming

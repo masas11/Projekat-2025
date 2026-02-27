@@ -12,6 +12,7 @@ type Config struct {
 	RatingsServiceURL       string
 	AnalyticsServiceURL     string
 	HDFSNamenodeURL         string
+	RedisURL                string
 }
 
 func Load() *Config {
@@ -60,6 +61,11 @@ func Load() *Config {
 		hdfsNamenodeURL = "http://hdfs-namenode:9870"
 	}
 
+	redisURL := os.Getenv("REDIS_URL")
+	if redisURL == "" {
+		redisURL = "redis:6379"
+	}
+
 	return &Config{
 		Port:                     port,
 		MongoDBURI:               mongoURI,
@@ -70,5 +76,6 @@ func Load() *Config {
 		RatingsServiceURL:        ratingsServiceURL,
 		AnalyticsServiceURL:      analyticsServiceURL,
 		HDFSNamenodeURL:          hdfsNamenodeURL,
+		RedisURL:                 redisURL,
 	}
 }

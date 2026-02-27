@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"content-service/config"
+	"content-service/internal/cache"
 	"content-service/internal/handler"
 	"content-service/internal/logger"
 	"content-service/internal/middleware"
@@ -58,10 +59,26 @@ func main() {
 	hdfsClient := storage.NewHDFSClient(cfg.HDFSNamenodeURL)
 	log.Println("HDFS client initialized")
 
+	// Initialize Redis cache (2.12)
+	redisCache, err := cache.NewRedisCache(cfg.RedisURL)
+	if err != nil {
+		log.Printf("Warning: Failed to connect to Redis: %v. Caching will be disabled.", err)
+		redisCache = nil
+	} else {
+		defer redisCache.Close()
+		log.Println("Redis cache initialized")
+	}
+
 	// Initialize handlers
 	artistHandler := handler.NewArtistHandler(artistRepo, cfg.SubscriptionsServiceURL, cfg.RecommendationServiceURL, appLogger)
 	albumHandler := handler.NewAlbumHandler(albumRepo, artistRepo, cfg.SubscriptionsServiceURL, cfg.RecommendationServiceURL, appLogger)
-	songHandler := handler.NewSongHandler(songRepo, albumRepo, artistRepo, cfg.SubscriptionsServiceURL, cfg.RecommendationServiceURL, cfg.RatingsServiceURL, cfg.AnalyticsServiceURL, appLogger, hdfsClient)
+	songHandler := handler.NewSongHandler(songRepo, albumRepo, artistRepo, cfg.SubscriptionsServiceURL, cfg.RecommendationServiceURL, cfg.RatingsServiceURL, cfg.AnalyticsServiceURL, appLogger, hdfsClient, redisCache)
+	
+	// Initialize most played handler (2.12)
+	var mostPlayedHandler *handler.MostPlayedHandler
+	if redisCache != nil {
+		mostPlayedHandler = handler.NewMostPlayedHandler(songRepo, redisCache)
+	}
 
 	mux := http.NewServeMux()
 
@@ -217,6 +234,24 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]bool{"exists": exists})
 	})
+
+	// Most played songs endpoint (2.12)
+	if mostPlayedHandler != nil {
+		mux.HandleFunc("/songs/most-played", func(w http.ResponseWriter, r *http.Request) {
+			// Add CORS headers
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+			// Handle preflight request
+			if r.Method == "OPTIONS" {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+
+			mostPlayedHandler.GetMostPlayedSongs(w, r)
+		})
+	}
 
 	// Artist routes
 	// GET /artists - get all artists (public)

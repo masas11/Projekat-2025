@@ -318,6 +318,9 @@ services:
       - PORT=8007
       - MONGODB_URI=mongodb://mongodb-analytics:27017
       - MONGODB_DATABASE=analytics_db
+      - CONTENT_SERVICE_URL=http://content-service:8002
+      - RATINGS_SERVICE_URL=http://ratings-service:8003
+      - SUBSCRIPTIONS_SERVICE_URL=http://subscriptions-service:8004
       # TLS_CERT_FILE and TLS_KEY_FILE removed for development
       # - TLS_CERT_FILE=/app/certs/server.crt
       # - TLS_KEY_FILE=/app/certs/server.key

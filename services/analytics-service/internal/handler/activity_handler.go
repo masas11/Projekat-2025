@@ -2,12 +2,15 @@ package handler
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"log"
 	"net/http"
+	"sort"
 	"strconv"
 	"time"
 
+	"analytics-service/config"
 	"analytics-service/internal/model"
 	"analytics-service/internal/store"
 )
@@ -15,12 +18,14 @@ import (
 type ActivityHandler struct {
 	ActivityStore *store.ActivityStore // For backward compatibility
 	EventStore    *store.EventStore    // Event Sourcing (2.14)
+	Config        *config.Config
 }
 
-func NewActivityHandler(activityStore *store.ActivityStore, eventStore *store.EventStore) *ActivityHandler {
+func NewActivityHandler(activityStore *store.ActivityStore, eventStore *store.EventStore, cfg *config.Config) *ActivityHandler {
 	return &ActivityHandler{
 		ActivityStore: activityStore,
 		EventStore:    eventStore,
+		Config:        cfg,
 	}
 }
 
@@ -236,5 +241,282 @@ func (h *ActivityHandler) ReplayEvents(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(state); err != nil {
 		log.Printf("Error encoding state: %v", err)
+	}
+}
+
+// GetUserAnalytics calculates and returns analytics for a user
+func (h *ActivityHandler) GetUserAnalytics(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	userID := r.URL.Query().Get("userId")
+	if userID == "" {
+		http.Error(w, "userId parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	// Initialize analytics response
+	analytics := &model.UserAnalytics{
+		UserID:             userID,
+		SongsPlayedByGenre: make(map[string]int),
+		Top5Artists:        []model.ArtistPlayCount{},
+	}
+
+	// 1. Get all song play activities
+	activities, err := h.ActivityStore.GetByUserIDAndType(ctx, userID, model.ActivityTypeSongPlayed, 0) // 0 = no limit
+	if err != nil {
+		log.Printf("Error getting activities: %v", err)
+		http.Error(w, "failed to get activities", http.StatusInternalServerError)
+		return
+	}
+
+	analytics.TotalSongsPlayed = len(activities)
+
+	// Create HTTP client for service calls
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	client := &http.Client{
+		Timeout:   5 * time.Second,
+		Transport: tr,
+	}
+
+	// Maps to track data
+	genreCount := make(map[string]int)
+	artistCount := make(map[string]int) // artistID -> count
+	artistNames := make(map[string]string) // artistID -> name
+	songIDs := make(map[string]bool) // unique song IDs
+	songMap := make(map[string]struct { // songID -> song data
+		Genre     string
+		ArtistIDs []string
+	})
+
+	// Collect unique song IDs from activities
+	for _, activity := range activities {
+		if activity.SongID != "" {
+			songIDs[activity.SongID] = true
+		}
+	}
+
+	// Load all songs from content service at once
+	if len(songIDs) > 0 {
+		songsURL := h.Config.ContentServiceURL + "/songs"
+		songsReq, err := http.NewRequestWithContext(ctx, "GET", songsURL, nil)
+		if err == nil {
+			songsResp, err := client.Do(songsReq)
+			if err == nil && songsResp != nil && songsResp.StatusCode == http.StatusOK {
+				var allSongs []struct {
+					ID        string   `json:"id"`
+					Genre     string   `json:"genre"`
+					ArtistIDs []string `json:"artistIds"`
+				}
+				if json.NewDecoder(songsResp.Body).Decode(&allSongs) == nil {
+					// Build song map for quick lookup
+					for _, song := range allSongs {
+						if songIDs[song.ID] {
+							songMap[song.ID] = struct {
+								Genre     string
+								ArtistIDs []string
+							}{
+								Genre:     song.Genre,
+								ArtistIDs: song.ArtistIDs,
+							}
+						}
+					}
+				}
+				songsResp.Body.Close()
+			}
+		}
+	}
+
+	// 2. Process activities to get genre and artist counts
+	for _, activity := range activities {
+		if activity.SongID == "" {
+			continue
+		}
+
+		// Try to get song data from map
+		songData, found := songMap[activity.SongID]
+		if !found {
+			// Fallback: try to get from activity if available
+			if activity.Genre != "" {
+				genreCount[activity.Genre]++
+			}
+			if activity.ArtistID != "" {
+				artistCount[activity.ArtistID]++
+				if activity.ArtistName != "" {
+					artistNames[activity.ArtistID] = activity.ArtistName
+				}
+			}
+			continue
+		}
+
+		// Count by genre
+		if songData.Genre != "" {
+			genreCount[songData.Genre]++
+		}
+
+		// Count by artist
+		for _, artistID := range songData.ArtistIDs {
+			if artistID != "" {
+				artistCount[artistID]++
+				// Try to get artist name from activity
+				if activity.ArtistID == artistID && activity.ArtistName != "" {
+					artistNames[artistID] = activity.ArtistName
+				}
+			}
+		}
+	}
+
+	analytics.SongsPlayedByGenre = genreCount
+
+	// 3. Get top 5 artists - fetch artist names from content service
+	type artistData struct {
+		ID       string
+		Name     string
+		PlayCount int
+	}
+	artists := make([]artistData, 0, len(artistCount))
+	
+	// Fetch all artists from content service to get names
+	artistsURL := h.Config.ContentServiceURL + "/artists"
+	artistsReq, err := http.NewRequestWithContext(ctx, "GET", artistsURL, nil)
+	if err == nil {
+		artistsResp, err := client.Do(artistsReq)
+		if err == nil && artistsResp != nil && artistsResp.StatusCode == http.StatusOK {
+			var allArtists []struct {
+				ID   string `json:"id"`
+				Name string `json:"name"`
+			}
+			if json.NewDecoder(artistsResp.Body).Decode(&allArtists) == nil {
+				// Build artist name map
+				for _, artist := range allArtists {
+					if artistNames[artist.ID] == "" {
+						artistNames[artist.ID] = artist.Name
+					}
+				}
+			}
+			artistsResp.Body.Close()
+		}
+	}
+	
+	// Build artist list with names
+	for artistID, count := range artistCount {
+		name := artistNames[artistID]
+		if name == "" {
+			// Fallback: try to get from content service individually
+			artistURL := h.Config.ContentServiceURL + "/artists/" + artistID
+			artistReq, err := http.NewRequestWithContext(ctx, "GET", artistURL, nil)
+			if err == nil {
+				artistResp, err := client.Do(artistReq)
+				if err == nil && artistResp != nil && artistResp.StatusCode == http.StatusOK {
+					var artist struct {
+						Name string `json:"name"`
+					}
+					if json.NewDecoder(artistResp.Body).Decode(&artist) == nil {
+						name = artist.Name
+						artistNames[artistID] = name
+					}
+					artistResp.Body.Close()
+				}
+			}
+			// If still no name, use a formatted version of ID
+			if name == "" {
+				name = "Umetnik " + artistID[:8] + "..."
+			}
+		}
+		artists = append(artists, artistData{
+			ID:        artistID,
+			Name:      name,
+			PlayCount: count,
+		})
+	}
+
+	// Sort by play count descending
+	sort.Slice(artists, func(i, j int) bool {
+		return artists[i].PlayCount > artists[j].PlayCount
+	})
+
+	// Take top 5
+	top5Count := 5
+	if len(artists) < top5Count {
+		top5Count = len(artists)
+	}
+	analytics.Top5Artists = make([]model.ArtistPlayCount, top5Count)
+	for i := 0; i < top5Count; i++ {
+		analytics.Top5Artists[i] = model.ArtistPlayCount{
+			ArtistID:   artists[i].ID,
+			ArtistName: artists[i].Name,
+			PlayCount:  artists[i].PlayCount,
+		}
+	}
+
+	// 4. Get average rating from ratings service
+	ratingsURL := h.Config.RatingsServiceURL + "/ratings-by-user?userId=" + userID
+	ratingsReq, err := http.NewRequestWithContext(ctx, "GET", ratingsURL, nil)
+	if err == nil {
+		ratingsResp, err := client.Do(ratingsReq)
+		if err == nil && ratingsResp != nil && ratingsResp.StatusCode == http.StatusOK {
+			var ratings []struct {
+				Rating int `json:"rating"`
+			}
+			if json.NewDecoder(ratingsResp.Body).Decode(&ratings) == nil {
+				if len(ratings) > 0 {
+					sum := 0
+					for _, r := range ratings {
+						sum += r.Rating
+					}
+					analytics.AverageRating = float64(sum) / float64(len(ratings))
+				}
+			}
+			ratingsResp.Body.Close()
+		}
+	}
+
+	// 5. Get subscribed artists count from subscriptions service
+	subsURL := h.Config.SubscriptionsServiceURL + "/subscriptions?userId=" + userID
+	subsReq, err := http.NewRequestWithContext(ctx, "GET", subsURL, nil)
+	if err == nil {
+		subsResp, err := client.Do(subsReq)
+		if err == nil && subsResp != nil && subsResp.StatusCode == http.StatusOK {
+			var subscriptions []struct {
+				Type     string `json:"type"`
+				ArtistID string `json:"artistId,omitempty"`
+			}
+			if json.NewDecoder(subsResp.Body).Decode(&subscriptions) == nil {
+				count := 0
+				uniqueArtists := make(map[string]bool)
+				for _, sub := range subscriptions {
+					if sub.Type == "artist" && sub.ArtistID != "" {
+						// Count unique artists (in case of duplicates)
+						if !uniqueArtists[sub.ArtistID] {
+							uniqueArtists[sub.ArtistID] = true
+							count++
+						}
+					}
+				}
+				analytics.SubscribedArtistsCount = count
+			}
+			subsResp.Body.Close()
+		} else {
+			if subsResp != nil {
+				log.Printf("Error getting subscriptions: %v, status: %d", err, subsResp.StatusCode)
+			} else {
+				log.Printf("Error getting subscriptions: %v (no response)", err)
+			}
+		}
+	} else {
+		log.Printf("Error creating subscriptions request: %v", err)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(analytics); err != nil {
+		log.Printf("Error encoding analytics: %v", err)
 	}
 }

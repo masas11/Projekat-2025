@@ -7,6 +7,8 @@ data/mongodb-users/*
 data/mongodb-content/*
 data/mongodb-ratings/*
 data/mongodb-subscriptions/*
+data/mongodb-analytics/*
+data/mongodb-saga/*
 data/cassandra/*
 data/neo4j/*
 
@@ -15,6 +17,8 @@ data/neo4j/*
 !data/mongodb-content/.gitkeep
 !data/mongodb-ratings/.gitkeep
 !data/mongodb-subscriptions/.gitkeep
+!data/mongodb-analytics/.gitkeep
+!data/mongodb-saga/.gitkeep
 !data/cassandra/.gitkeep
 
 # Go
@@ -61,6 +65,9 @@ certs/*.pem
 
 # HDFS data
 data/hdfs/
+
+# Redis data
+data/redis/
 
 # Local audio files (uploaded to HDFS)
 songs/

@@ -309,6 +309,11 @@ class ApiService {
     }
   }
 
+  // Get user analytics (1.16)
+  async getUserAnalytics(userId) {
+    return this.request(`/api/analytics/analytics?userId=${userId}`);
+  }
+
   // Notifications Service
   // userId is automatically extracted from JWT token by API Gateway
   async getNotifications() {

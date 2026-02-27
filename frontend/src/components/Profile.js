@@ -36,6 +36,7 @@ const Profile = () => {
     }
   };
 
+
   const handleUnsubscribeArtist = async (artistId) => {
     if (!user) return;
 

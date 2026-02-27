@@ -30,7 +30,10 @@ func enableCORS(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", origin)
 	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-	w.Header().Set("Access-Control-Allow-Credentials", "true")
+	// Ne postavljaj Access-Control-Allow-Credentials ako je origin "*" jer browser to ne dozvoljava
+	if origin != "*" {
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+	}
 }
 
 // proxyRequest prosleđuje zahtev ka backend servisu
@@ -915,6 +918,35 @@ func main() {
 		// Create new request with updated query
 		targetURL := cfg.AnalyticsServiceURL + "/activities?" + query
 		log.Printf("Proxying analytics activities request to: %s", targetURL)
+		proxyRequest(w, r, targetURL, appLogger)
+	})))
+
+	// GET /api/analytics/analytics - get user analytics (1.16) (requires auth, non-admin only)
+	mux.HandleFunc("/api/analytics/analytics", globalRateLimit(requireNonAdmin(func(w http.ResponseWriter, r *http.Request) {
+		// Add CORS headers
+		enableCORS(w, r)
+
+		// Get userId from JWT token
+		claims, ok := r.Context().Value(middleware.UserContextKey).(*middleware.UserClaims)
+		if !ok || claims == nil {
+			log.Printf("Failed to get user claims from context")
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		log.Printf("Getting analytics for user: %s", claims.UserID)
+
+		// Add userId from JWT token to query params
+		query := r.URL.RawQuery
+		if query != "" {
+			query += "&userId=" + claims.UserID
+		} else {
+			query = "userId=" + claims.UserID
+		}
+
+		// Create new request with updated query
+		targetURL := cfg.AnalyticsServiceURL + "/analytics?" + query
+		log.Printf("Proxying analytics request to: %s", targetURL)
 		proxyRequest(w, r, targetURL, appLogger)
 	})))
 

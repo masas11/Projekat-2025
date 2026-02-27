@@ -47,7 +47,7 @@ func main() {
 	db := mongoClient.Database(cfg.MongoDBDatabase)
 	activityStore := store.NewActivityStore(db)
 	eventStore := store.NewEventStore(db) // Event Sourcing (2.14)
-	activityHandler := handler.NewActivityHandler(activityStore, eventStore)
+	activityHandler := handler.NewActivityHandler(activityStore, eventStore, cfg)
 
 	log.Printf("Connected to MongoDB at %s, database: %s", cfg.MongoDBURI, cfg.MongoDBDatabase)
 	log.Println("Event Store initialized for Event Sourcing (2.14)")
@@ -117,6 +117,26 @@ func main() {
 
 		if r.Method == http.MethodGet {
 			activityHandler.ReplayEvents(w, r)
+		} else {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	// Analytics endpoint (1.16)
+	mux.HandleFunc("/analytics", func(w http.ResponseWriter, r *http.Request) {
+		// Add CORS headers
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+		// Handle preflight request
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		if r.Method == http.MethodGet {
+			activityHandler.GetUserAnalytics(w, r)
 		} else {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}

@@ -21,6 +21,7 @@ import UrlTester from './components/UrlTester';
 import Notifications from './components/Notifications';
 import Profile from './components/Profile';
 import ActivityHistory from './components/ActivityHistory';
+import Analytics from './components/Analytics';
 import ProtectedRoute from './components/ProtectedRoute';
 import './App.css';
 
@@ -75,6 +76,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <ActivityHistory />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/analytics"
+              element={
+                <ProtectedRoute>
+                  <Analytics />
                 </ProtectedRoute>
               }
             />

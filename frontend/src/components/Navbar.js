@@ -42,6 +42,11 @@ const Navbar = () => {
               <Link to="/activity-history" style={{ textDecoration: 'none', transition: 'opacity 0.2s' }} onMouseEnter={(e) => e.target.style.opacity = '0.8'} onMouseLeave={(e) => e.target.style.opacity = '1'}>
                 Istorija Aktivnosti
               </Link>
+              {!isAdmin() && (
+                <Link to="/analytics" style={{ textDecoration: 'none', transition: 'opacity 0.2s' }} onMouseEnter={(e) => e.target.style.opacity = '0.8'} onMouseLeave={(e) => e.target.style.opacity = '1'}>
+                  Analitike
+                </Link>
+              )}
               <Link to="/profile" style={{ textDecoration: 'none', transition: 'opacity 0.2s' }} onMouseEnter={(e) => e.target.style.opacity = '0.8'} onMouseLeave={(e) => e.target.style.opacity = '1'}>
                 Moj Profil
               </Link>

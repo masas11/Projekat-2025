@@ -33,7 +33,10 @@ func enableCORS(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", origin)
 	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-	w.Header().Set("Access-Control-Allow-Credentials", "true")
+	// Ne postavljaj Access-Control-Allow-Credentials ako je origin "*" jer browser to ne dozvoljava
+	if origin != "*" {
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+	}
 }
 
 // getClientIP extracts the client IP address from the request

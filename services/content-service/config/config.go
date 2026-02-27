@@ -9,6 +9,8 @@ type Config struct {
 	JWTSecret               string
 	SubscriptionsServiceURL string
 	RecommendationServiceURL string
+	RatingsServiceURL       string
+	AnalyticsServiceURL     string
 	HDFSNamenodeURL         string
 }
 
@@ -43,6 +45,16 @@ func Load() *Config {
 		recommendationServiceURL = "http://recommendation-service:8006"
 	}
 
+	ratingsServiceURL := os.Getenv("RATINGS_SERVICE_URL")
+	if ratingsServiceURL == "" {
+		ratingsServiceURL = "http://ratings-service:8003"
+	}
+
+	analyticsServiceURL := os.Getenv("ANALYTICS_SERVICE_URL")
+	if analyticsServiceURL == "" {
+		analyticsServiceURL = "http://analytics-service:8007"
+	}
+
 	hdfsNamenodeURL := os.Getenv("HDFS_NAMENODE_URL")
 	if hdfsNamenodeURL == "" {
 		hdfsNamenodeURL = "http://hdfs-namenode:9870"
@@ -55,6 +67,8 @@ func Load() *Config {
 		JWTSecret:                jwtSecret,
 		SubscriptionsServiceURL:  subscriptionsServiceURL,
 		RecommendationServiceURL: recommendationServiceURL,
+		RatingsServiceURL:        ratingsServiceURL,
+		AnalyticsServiceURL:      analyticsServiceURL,
 		HDFSNamenodeURL:          hdfsNamenodeURL,
 	}
 }

@@ -39,6 +39,9 @@ const Navbar = () => {
               <Link to={`/notifications?userId=${user.id}`} style={{ textDecoration: 'none', transition: 'opacity 0.2s' }} onMouseEnter={(e) => e.target.style.opacity = '0.8'} onMouseLeave={(e) => e.target.style.opacity = '1'}>
                 Notifikacije
               </Link>
+              <Link to="/activity-history" style={{ textDecoration: 'none', transition: 'opacity 0.2s' }} onMouseEnter={(e) => e.target.style.opacity = '0.8'} onMouseLeave={(e) => e.target.style.opacity = '1'}>
+                Istorija Aktivnosti
+              </Link>
               <Link to="/profile" style={{ textDecoration: 'none', transition: 'opacity 0.2s' }} onMouseEnter={(e) => e.target.style.opacity = '0.8'} onMouseLeave={(e) => e.target.style.opacity = '1'}>
                 Moj Profil
               </Link>

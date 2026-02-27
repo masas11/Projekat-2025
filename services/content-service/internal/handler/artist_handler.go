@@ -265,8 +265,10 @@ func (h *ArtistHandler) DeleteArtist(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Emit deletion event to recommendation-service (asynchronous)
+	// Use context.Background() instead of r.Context() because the HTTP request context
+	// gets canceled when the response is sent, but we need the event to be sent asynchronously
 	if artist != nil {
-		events.EmitEvent(r.Context(), h.RecommendationServiceURL, events.DeletedArtistEvent{
+		events.EmitEvent(context.Background(), h.RecommendationServiceURL, events.DeletedArtistEvent{
 			Type:     events.EventTypeDeletedArtist,
 			ArtistID: id,
 		})

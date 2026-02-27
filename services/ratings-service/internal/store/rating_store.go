@@ -133,3 +133,37 @@ func (rs *RatingStore) DeleteBySongAndUser(ctx context.Context, songID, userID s
 	log.Printf("Deleted rating for songId: %s, userId: %s", songID, userID)
 	return nil
 }
+
+// DeleteBySong deletes all ratings for a specific song
+func (rs *RatingStore) DeleteBySong(ctx context.Context, songID string) error {
+	filter := bson.M{
+		"songId": songID,
+	}
+
+	result, err := rs.collection.DeleteMany(ctx, filter)
+	if err != nil {
+		log.Printf("Error deleting ratings for song: %v", err)
+		return err
+	}
+
+	log.Printf("Deleted %d ratings for songId: %s", result.DeletedCount, songID)
+	return nil
+}
+
+// GetByUserID returns all ratings for a specific user
+func (rs *RatingStore) GetByUserID(ctx context.Context, userID string) ([]*model.Rating, error) {
+	cursor, err := rs.collection.Find(ctx, bson.M{"userId": userID})
+	if err != nil {
+		log.Printf("Error getting ratings for user: %v", err)
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var ratings []*model.Rating
+	if err = cursor.All(ctx, &ratings); err != nil {
+		log.Printf("Error decoding ratings: %v", err)
+		return nil, err
+	}
+
+	return ratings, nil
+}

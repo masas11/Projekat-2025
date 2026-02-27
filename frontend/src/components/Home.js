@@ -16,20 +16,39 @@ const Home = () => {
     try {
       // Koristi API Gateway endpoint umesto direktnog poziva na ratings-service
       const token = localStorage.getItem('token');
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8081'}/api/ratings/recommendations?userId=${user.id}`, {
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:8081';
+      const response = await fetch(`${apiUrl}/api/ratings/recommendations?userId=${user.id}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
+      
       if (!response.ok) {
-        throw new Error('Failed to fetch recommendations');
+        // Handle specific error cases
+        if (response.status === 503) {
+          throw new Error('Servis za preporuke trenutno nije dostupan. Molimo pokušajte kasnije.');
+        } else if (response.status === 401) {
+          throw new Error('Niste autorizovani. Molimo prijavite se ponovo.');
+        } else if (response.status === 500) {
+          throw new Error('Greška na serveru. Molimo pokušajte kasnije.');
+        } else {
+          throw new Error(`Greška pri učitavanju preporuka (${response.status})`);
+        }
       }
+      
       const data = await response.json();
       setRecommendations(data);
     } catch (err) {
       console.error('Error fetching recommendations:', err);
-      setError('Unable to load recommendations');
+      // Use the error message from the catch block if it's already a user-friendly message
+      if (err.message && err.message.includes('Servis') || err.message.includes('Niste') || err.message.includes('Greška')) {
+        setError(err.message);
+      } else if (err.name === 'TypeError' && err.message.includes('fetch')) {
+        setError('Nema konekcije sa serverom. Proverite da li su svi servisi pokrenuti.');
+      } else {
+        setError('Nije moguće učitati preporuke. Molimo pokušajte kasnije.');
+      }
     } finally {
       setLoading(false);
     }
@@ -410,9 +429,47 @@ const Home = () => {
               )}
 
               {error && (
-                <div className="error" style={{ marginBottom: '20px' }}>
-                  <span>⚠️</span>
-                  <span>{error}</span>
+                <div style={{
+                  background: 'linear-gradient(135deg, rgba(255, 193, 7, 0.1) 0%, rgba(255, 152, 0, 0.1) 100%)',
+                  border: '2px solid rgba(255, 193, 7, 0.3)',
+                  borderRadius: '12px',
+                  padding: '24px',
+                  marginBottom: '20px',
+                  textAlign: 'center'
+                }}>
+                  <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚠️</div>
+                  <p style={{ 
+                    color: '#666', 
+                    fontSize: '16px', 
+                    lineHeight: '1.6',
+                    marginBottom: '20px'
+                  }}>
+                    {error}
+                  </p>
+                  <button
+                    onClick={fetchRecommendations}
+                    style={{
+                      padding: '12px 24px',
+                      fontSize: '16px',
+                      fontWeight: '600',
+                      borderRadius: '8px',
+                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                      color: 'white',
+                      border: 'none',
+                      cursor: 'pointer',
+                      transition: 'all 0.3s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(102, 126, 234, 0.3)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = 'none';
+                    }}
+                  >
+                    🔄 Pokušaj ponovo
+                  </button>
                 </div>
               )}
 

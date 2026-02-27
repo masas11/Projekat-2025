@@ -13,6 +13,7 @@ services:
       - SUBSCRIPTIONS_SERVICE_URL=http://subscriptions-service:8004
       - RATINGS_SERVICE_URL=http://ratings-service:8003
       - RECOMMENDATION_SERVICE_URL=http://recommendation-service:8006
+      - ANALYTICS_SERVICE_URL=http://analytics-service:8007
       # TLS_CERT_FILE and TLS_KEY_FILE removed for development - API Gateway will use HTTP
       # - TLS_CERT_FILE=/app/certs/server.crt
       # - TLS_KEY_FILE=/app/certs/server.key
@@ -94,6 +95,8 @@ services:
       - JWT_SECRET=your-secret-key-change-in-production
       - SUBSCRIPTIONS_SERVICE_URL=http://subscriptions-service:8004
       - RECOMMENDATION_SERVICE_URL=http://recommendation-service:8006
+      - RATINGS_SERVICE_URL=http://ratings-service:8003
+      - ANALYTICS_SERVICE_URL=http://analytics-service:8007
       - HDFS_NAMENODE_URL=http://hdfs-namenode:9870
       # TLS_CERT_FILE and TLS_KEY_FILE removed for development
       # - TLS_CERT_FILE=/app/certs/server.crt
@@ -153,6 +156,7 @@ services:
       - MONGODB_URI=mongodb://mongodb-ratings:27017
       - MONGODB_DATABASE=ratings_db
       - RECOMMENDATION_SERVICE_URL=http://recommendation-service:8006
+      - ANALYTICS_SERVICE_URL=http://analytics-service:8007
       # TLS_CERT_FILE and TLS_KEY_FILE removed for development
       # - TLS_CERT_FILE=/app/certs/server.crt
       # - TLS_KEY_FILE=/app/certs/server.key
@@ -195,6 +199,7 @@ services:
       - MONGODB_DATABASE=subscriptions_db
       - NOTIFICATIONS_SERVICE_URL=http://notifications-service:8005
       - RECOMMENDATION_SERVICE_URL=http://recommendation-service:8006
+      - ANALYTICS_SERVICE_URL=http://analytics-service:8007
       # TLS_CERT_FILE and TLS_KEY_FILE removed for development
       # - TLS_CERT_FILE=/app/certs/server.crt
       # - TLS_KEY_FILE=/app/certs/server.key
@@ -228,7 +233,8 @@ services:
     volumes:
       - ./certs:/app/certs:ro
     depends_on:
-      - cassandra
+      cassandra:
+        condition: service_healthy
     networks:
       - music-streaming-network
 
@@ -244,6 +250,12 @@ services:
       - CASSANDRA_CLUSTER_NAME=MusicStreamingCluster
       - MAX_HEAP_SIZE=512M
       - HEAP_NEWSIZE=100M
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'SELECT now() FROM system.local' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
 
   neo4j:
     image: neo4j:5.15
@@ -258,10 +270,11 @@ services:
     networks:
       - music-streaming-network
     healthcheck:
-      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "password", "RETURN 1"]
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:7474 || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
 
   recommendation-service:
     build:
@@ -277,6 +290,7 @@ services:
       - RATINGS_SERVICE_URL=http://ratings-service:8003
       - SUBSCRIPTIONS_SERVICE_URL=http://subscriptions-service:8004
       - CONTENT_SERVICE_URL=http://content-service:8002
+      - ANALYTICS_SERVICE_URL=http://analytics-service:8007
       # TLS_CERT_FILE and TLS_KEY_FILE removed for development
       # - TLS_CERT_FILE=/app/certs/server.crt
       # - TLS_KEY_FILE=/app/certs/server.key
@@ -285,23 +299,42 @@ services:
       - ./certs:/app/certs:ro
     depends_on:
       neo4j:
-        condition: service_started
+        condition: service_healthy
     networks:
       - music-streaming-network
 
   analytics-service:
     build:
-      context: ./services/analytics-service
-      dockerfile: Dockerfile
+      context: ./services
+      dockerfile: analytics-service/Dockerfile
     ports:
       - "8007:8007"
     environment:
       - PORT=8007
+      - MONGODB_URI=mongodb://mongodb-analytics:27017
+      - MONGODB_DATABASE=analytics_db
       # TLS_CERT_FILE and TLS_KEY_FILE removed for development
       # - TLS_CERT_FILE=/app/certs/server.crt
       # - TLS_KEY_FILE=/app/certs/server.key
+      - JAEGER_ENDPOINT=http://jaeger:14268/api/traces
     volumes:
       - ./certs:/app/certs:ro
+    depends_on:
+      mongodb-analytics:
+        condition: service_healthy
+    networks:
+      - music-streaming-network
+
+  mongodb-analytics:
+    image: mongo:7.0
+    volumes:
+      - ./data/mongodb-analytics:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
     networks:
       - music-streaming-network
 

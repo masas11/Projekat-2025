@@ -262,7 +262,46 @@ class ApiService {
   }
 
   getStreamUrl(songId) {
+    const token = localStorage.getItem('token');
+    if (token) {
+      return `${this.baseURL}/api/content/songs/${songId}/stream?token=${encodeURIComponent(token)}`;
+    }
     return `${this.baseURL}/api/content/songs/${songId}/stream`;
+  }
+
+  // Analytics Service (1.15)
+  // Direktno pozivamo analytics-service jer API Gateway trenutno ne prosleđuje podatke ispravno
+  async getUserActivities(limit = 50, type = null, userId) {
+    const params = new URLSearchParams();
+    if (limit) params.append('limit', limit);
+    if (type) params.append('type', type);
+    if (userId) params.append('userId', userId);
+
+    const base = process.env.REACT_APP_ANALYTICS_URL || 'http://localhost:8007';
+    const url = `${base}/activities?${params.toString()}`;
+
+    console.log('getUserActivities called (direct analytics) with:', { limit, type, userId, url });
+
+    const token = localStorage.getItem('token');
+    const headers = {
+      'Content-Type': 'application/json',
+    };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
+    const response = await fetch(url, { headers });
+    const text = await response.text();
+    if (!response.ok) {
+      throw new Error(text || `Greška prilikom učitavanja aktivnosti (status ${response.status})`);
+    }
+
+    try {
+      return text ? JSON.parse(text) : [];
+    } catch (e) {
+      console.error('Greška pri parsiranju aktivnosti:', e, 'raw:', text);
+      throw new Error('Neispravan odgovor servera za aktivnosti');
+    }
   }
 
   // Notifications Service

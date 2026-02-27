@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -674,7 +675,10 @@ func main() {
 
 		// Check if this is a streaming request
 		if strings.HasSuffix(path, "/stream") {
-			proxyRequest(w, r, cfg.ContentServiceURL+"/songs/"+path, appLogger)
+			// Use OptionalAuth to extract userID if token is present (for activity logging 1.15)
+			middleware.OptionalAuth(cfg, appLogger)(func(w http.ResponseWriter, r *http.Request) {
+				proxyRequest(w, r, cfg.ContentServiceURL+"/songs/"+path, appLogger)
+			})(w, r)
 			return
 		}
 
@@ -870,6 +874,34 @@ func main() {
 			cleanUserId = cleanUserId[:idx]
 		}
 		targetURL := cfg.RecommendationServiceURL + "/recommendations?userId=" + cleanUserId
+		proxyRequest(w, r, targetURL, appLogger)
+	})))
+
+	// ANALYTICS SERVICE ROUTES (1.15)
+	// GET /api/analytics/activities - get user activities (requires auth, non-admin only)
+	mux.HandleFunc("/api/analytics/activities", globalRateLimit(requireNonAdmin(func(w http.ResponseWriter, r *http.Request) {
+		// Get userId from JWT token
+		claims, ok := r.Context().Value(middleware.UserContextKey).(*middleware.UserClaims)
+		if !ok || claims == nil {
+			appLogger.LogError("analytics", "Failed to get user claims from context")
+			enableCORS(w, r)
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		appLogger.LogInfo("analytics", fmt.Sprintf("Getting activities for user: %s", claims.UserID))
+
+		// Add userId from JWT token to query params
+		query := r.URL.RawQuery
+		if query != "" {
+			query += "&userId=" + claims.UserID
+		} else {
+			query = "userId=" + claims.UserID
+		}
+
+		// Create new request with updated query
+		targetURL := cfg.AnalyticsServiceURL + "/activities?" + query
+		appLogger.LogInfo("analytics", fmt.Sprintf("Proxying request to: %s", targetURL))
 		proxyRequest(w, r, targetURL, appLogger)
 	})))
 

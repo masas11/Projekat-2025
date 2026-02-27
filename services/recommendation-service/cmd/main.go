@@ -156,6 +156,57 @@ func main() {
 			log.Printf("Warning: Failed to ensure user exists in graph: %v", err)
 		}
 
+		// Auto-sync subscriptions and ratings for this user if not already synced
+		// This ensures existing data in MongoDB is available in Neo4j
+		log.Printf("Auto-syncing subscriptions and ratings for user: %s", userID)
+		
+		// Sync subscriptions
+		client := &http.Client{Timeout: 10 * time.Second}
+		subsResp, err := client.Get(fmt.Sprintf("%s/subscriptions?userId=%s", cfg.SubscriptionsServiceURL, userID))
+		if err == nil {
+			defer subsResp.Body.Close()
+			if subsResp.StatusCode == http.StatusOK {
+				var subscriptions []map[string]interface{}
+				if err := json.NewDecoder(subsResp.Body).Decode(&subscriptions); err == nil {
+					for _, sub := range subscriptions {
+						subType, _ := sub["type"].(string)
+						if subType == "genre" {
+							genre, _ := sub["genre"].(string)
+							if genre != "" {
+								if err := neo4jStore.AddSubscription(ctx, userID, genre); err != nil {
+									log.Printf("Error syncing subscription for user %s to genre %s: %v", userID, genre, err)
+								} else {
+									log.Printf("Auto-synced subscription: user %s -> genre %s", userID, genre)
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// Sync ratings - get all ratings for this user from ratings service
+		ratingsResp, err := client.Get(fmt.Sprintf("%s/ratings-by-user?userId=%s", cfg.RatingsServiceURL, userID))
+		if err == nil {
+			defer ratingsResp.Body.Close()
+			if ratingsResp.StatusCode == http.StatusOK {
+				var ratings []map[string]interface{}
+				if err := json.NewDecoder(ratingsResp.Body).Decode(&ratings); err == nil {
+					for _, rating := range ratings {
+						songID, _ := rating["songId"].(string)
+						ratingValue, _ := rating["rating"].(float64)
+						if songID != "" && ratingValue > 0 {
+							if err := neo4jStore.AddRating(ctx, userID, songID, int(ratingValue)); err != nil {
+								log.Printf("Error syncing rating for user %s to song %s: %v", userID, songID, err)
+							} else {
+								log.Printf("Auto-synced rating: user %s -> song %s (rating: %d)", userID, songID, int(ratingValue))
+							}
+						}
+					}
+				}
+			}
+		}
+
 		// Get songs from subscribed genres
 		log.Printf("Getting recommendations for user: %s", userID)
 		subscribedSongs, err := neo4jStore.GetSubscribedGenreSongs(ctx, userID)

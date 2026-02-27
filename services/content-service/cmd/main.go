@@ -61,7 +61,7 @@ func main() {
 	// Initialize handlers
 	artistHandler := handler.NewArtistHandler(artistRepo, cfg.SubscriptionsServiceURL, cfg.RecommendationServiceURL, appLogger)
 	albumHandler := handler.NewAlbumHandler(albumRepo, artistRepo, cfg.SubscriptionsServiceURL, cfg.RecommendationServiceURL, appLogger)
-	songHandler := handler.NewSongHandler(songRepo, albumRepo, artistRepo, cfg.SubscriptionsServiceURL, cfg.RecommendationServiceURL, appLogger, hdfsClient)
+	songHandler := handler.NewSongHandler(songRepo, albumRepo, artistRepo, cfg.SubscriptionsServiceURL, cfg.RecommendationServiceURL, cfg.RatingsServiceURL, cfg.AnalyticsServiceURL, appLogger, hdfsClient)
 
 	mux := http.NewServeMux()
 
@@ -174,7 +174,8 @@ func main() {
 		if strings.HasSuffix(path, "/stream") {
 			songID := strings.TrimSuffix(path, "/stream")
 			r.URL.Path = "/songs/" + songID + "/stream"
-			songHandler.StreamSong(w, r)
+			// Use OptionalAuth to extract userID if token is present (for activity logging 1.15)
+			middleware.OptionalAuth(cfg)(songHandler.StreamSong)(w, r)
 			return
 		}
 

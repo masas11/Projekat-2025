@@ -300,8 +300,10 @@ func (h *AlbumHandler) DeleteAlbum(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Emit deletion event to recommendation-service (asynchronous)
+	// Use context.Background() instead of r.Context() because the HTTP request context
+	// gets canceled when the response is sent, but we need the event to be sent asynchronously
 	if album != nil {
-		events.EmitEvent(r.Context(), h.RecommendationServiceURL, events.DeletedAlbumEvent{
+		events.EmitEvent(context.Background(), h.RecommendationServiceURL, events.DeletedAlbumEvent{
 			Type:    events.EventTypeDeletedAlbum,
 			AlbumID: id,
 		})

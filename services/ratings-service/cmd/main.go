@@ -20,8 +20,53 @@ import (
 	"ratings-service/config"
 	"ratings-service/internal/model"
 	"ratings-service/internal/store"
+	"shared/analytics"
 	"shared/tracing"
 )
+
+// getSongName fetches song details from content-service and returns its name.
+// If anything fails, it returns an empty string and logs the error, but does not block the main flow.
+func getSongName(client *http.Client, contentURL, songID string) string {
+	if contentURL == "" || songID == "" {
+		log.Printf("getSongName: missing contentURL or songID (contentURL=%s, songID=%s)", contentURL, songID)
+		return ""
+	}
+
+	log.Printf("getSongName: fetching song name for songID=%s from %s", songID, contentURL)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	songURL := contentURL + "/songs/" + url.PathEscape(songID)
+	log.Printf("getSongName: calling %s", songURL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, songURL, nil)
+	if err != nil {
+		log.Printf("getSongName: failed to create request: %v", err)
+		return ""
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("getSongName: failed to call content-service: %v", err)
+		return ""
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("getSongName: content-service returned status %d for song %s", resp.StatusCode, songID)
+		return ""
+	}
+
+	var song struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&song); err != nil {
+		log.Printf("getSongName: failed to decode song response: %v", err)
+		return ""
+	}
+	
+	log.Printf("getSongName: successfully retrieved song name '%s' for songID=%s", song.Name, songID)
+	return song.Name
+}
 
 // Simple Circuit Breaker implementation
 type CircuitBreaker struct {
@@ -483,6 +528,9 @@ func main() {
 			Rating: ratingValue,
 		}
 
+		// Try to fetch song name for activity logging (non-blocking if it fails)
+		songName := getSongName(clientHTTP, cfg.ContentServiceURL, songID)
+
 		// Check if user already rated this song
 
 		existingRating, err := ratingStore.GetBySongAndUser(ratingCtx, songID, userID)
@@ -534,6 +582,14 @@ func main() {
 			log.Printf("Updated rating for song %s by user %s", songID, userID)
 			// Emit event to recommendation-service
 			emitRatingEvent(cfg.RecommendationServiceURL, userID, songID, ratingValue, "rating_updated")
+			// Log activity (1.15)
+			analytics.LogActivity(cfg.AnalyticsServiceURL, analytics.Activity{
+				UserID: userID,
+				Type:   analytics.ActivityTypeRatingGiven,
+				SongID: songID,
+				SongName: songName,
+				Rating: ratingValue,
+			})
 		} else {
 			// Create new rating
 			err = ratingStore.Create(ratingCtx, ratingModel)
@@ -555,6 +611,14 @@ func main() {
 			log.Printf("Created rating for song %s by user %s", songID, userID)
 			// Emit event to recommendation-service
 			emitRatingEvent(cfg.RecommendationServiceURL, userID, songID, ratingValue, "rating_created")
+			// Log activity (1.15)
+			analytics.LogActivity(cfg.AnalyticsServiceURL, analytics.Activity{
+				UserID: userID,
+				Type:   analytics.ActivityTypeRatingGiven,
+				SongID: songID,
+				SongName: songName,
+				Rating: ratingValue,
+			})
 		}
 
 		w.WriteHeader(http.StatusOK)
@@ -761,6 +825,88 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(response)
+	})
+
+	// Delete all ratings for a song endpoint (called when song is deleted)
+	mux.HandleFunc("/delete-ratings-by-song", func(w http.ResponseWriter, r *http.Request) {
+		// Add CORS headers
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+		// Handle preflight request
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		if r.Method != http.MethodDelete {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		songID := r.URL.Query().Get("songId")
+		if songID == "" {
+			http.Error(w, "songId parameter is required", http.StatusBadRequest)
+			return
+		}
+
+		// Delete all ratings for this song
+		ratingCtx, ratingCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer ratingCancel()
+
+		err := ratingStore.DeleteBySong(ratingCtx, songID)
+		if err != nil {
+			log.Printf("Error deleting ratings for song: %v", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("Error deleting ratings"))
+			return
+		}
+
+		log.Printf("Deleted all ratings for song %s", songID)
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("All ratings deleted successfully"))
+	})
+
+	// Get all ratings for a user endpoint (for sync purposes)
+	mux.HandleFunc("/ratings-by-user", func(w http.ResponseWriter, r *http.Request) {
+		// Add CORS headers
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+		// Handle preflight request
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		userID := r.URL.Query().Get("userId")
+		if userID == "" {
+			http.Error(w, "userId parameter is required", http.StatusBadRequest)
+			return
+		}
+
+		// Get all ratings for user
+		ratingCtx, ratingCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer ratingCancel()
+
+		ratings, err := ratingStore.GetByUserID(ratingCtx, userID)
+		if err != nil {
+			log.Printf("Error getting ratings for user: %v", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("Error getting ratings"))
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(ratings)
 	})
 
 	log.Println("Ratings service running on port", cfg.Port)

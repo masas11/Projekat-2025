@@ -9,6 +9,7 @@ type Config struct {
 	MongoDBDatabase         string
 	NotificationsServiceURL string
 	RecommendationServiceURL string
+	AnalyticsServiceURL     string
 }
 
 func Load() *Config {
@@ -42,6 +43,11 @@ func Load() *Config {
 		recommendationServiceURL = "http://recommendation-service:8006"
 	}
 
+	analyticsServiceURL := os.Getenv("ANALYTICS_SERVICE_URL")
+	if analyticsServiceURL == "" {
+		analyticsServiceURL = "http://analytics-service:8007"
+	}
+
 	return &Config{
 		Port:                     port,
 		ContentServiceURL:        contentServiceURL,
@@ -49,5 +55,6 @@ func Load() *Config {
 		MongoDBDatabase:          mongoDB,
 		NotificationsServiceURL:  notificationsServiceURL,
 		RecommendationServiceURL: recommendationServiceURL,
+		AnalyticsServiceURL:      analyticsServiceURL,
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"content-service/internal/dto"
 	"content-service/internal/events"
@@ -17,6 +18,7 @@ import (
 	"content-service/internal/model"
 	"content-service/internal/storage"
 	"content-service/internal/store"
+	"shared/analytics"
 )
 
 func extractSongID(path string) string {
@@ -33,17 +35,21 @@ type SongHandler struct {
 	ArtistRepo               *store.ArtistRepository
 	SubscriptionsServiceURL  string
 	RecommendationServiceURL  string
+	RatingsServiceURL        string
+	AnalyticsServiceURL      string
 	Logger                   *logger.Logger
 	HDFSClient               *storage.HDFSClient
 }
 
-func NewSongHandler(repo *store.SongRepository, albumRepo *store.AlbumRepository, artistRepo *store.ArtistRepository, subscriptionsServiceURL, recommendationServiceURL string, log *logger.Logger, hdfsClient *storage.HDFSClient) *SongHandler {
+func NewSongHandler(repo *store.SongRepository, albumRepo *store.AlbumRepository, artistRepo *store.ArtistRepository, subscriptionsServiceURL, recommendationServiceURL, ratingsServiceURL, analyticsServiceURL string, log *logger.Logger, hdfsClient *storage.HDFSClient) *SongHandler {
 	return &SongHandler{
 		Repo:                     repo,
 		AlbumRepo:                albumRepo,
 		ArtistRepo:               artistRepo,
 		SubscriptionsServiceURL:  subscriptionsServiceURL,
 		RecommendationServiceURL: recommendationServiceURL,
+		RatingsServiceURL:        ratingsServiceURL,
+		AnalyticsServiceURL:      analyticsServiceURL,
 		Logger:                   log,
 		HDFSClient:               hdfsClient,
 	}
@@ -349,6 +355,29 @@ func (h *SongHandler) DeleteSong(w http.ResponseWriter, r *http.Request) {
 	// Get song before deletion for logging and events
 	song, _ := h.Repo.GetByID(r.Context(), id)
 
+	// Delete all ratings for this song from ratings-service
+	// This should be done before deleting the song to ensure data consistency
+	if h.RatingsServiceURL != "" {
+		go func() {
+			client := &http.Client{Timeout: 5 * time.Second}
+			deleteURL := fmt.Sprintf("%s/delete-ratings-by-song?songId=%s", h.RatingsServiceURL, id)
+			req, err := http.NewRequest("DELETE", deleteURL, nil)
+			if err == nil {
+				resp, err := client.Do(req)
+				if err != nil {
+					log.Printf("Error calling ratings-service to delete ratings for song %s: %v", id, err)
+				} else {
+					resp.Body.Close()
+					if resp.StatusCode == http.StatusOK {
+						log.Printf("Successfully deleted all ratings for song %s", id)
+					} else {
+						log.Printf("Failed to delete ratings for song %s: status %d", id, resp.StatusCode)
+					}
+				}
+			}
+		}()
+	}
+
 	if err := h.Repo.Delete(r.Context(), id); err != nil {
 		if err.Error() == "song not found" {
 			http.Error(w, "song not found", http.StatusNotFound)
@@ -359,8 +388,11 @@ func (h *SongHandler) DeleteSong(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Emit deletion event to recommendation-service (asynchronous)
+	// This will delete the song from Neo4j graph and all related recommendations
+	// Use context.Background() instead of r.Context() because the HTTP request context
+	// gets canceled when the response is sent, but we need the event to be sent asynchronously
 	if song != nil {
-		events.EmitEvent(r.Context(), h.RecommendationServiceURL, events.DeletedSongEvent{
+		events.EmitEvent(context.Background(), h.RecommendationServiceURL, events.DeletedSongEvent{
 			Type:   events.EventTypeDeletedSong,
 			SongID: id,
 		})
@@ -395,6 +427,18 @@ func (h *SongHandler) StreamSong(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "song not found", http.StatusNotFound)
 		return
+	}
+
+	// Log activity if user is authenticated (1.15)
+	// Try to get userID from JWT token (optional auth)
+	claims, ok := r.Context().Value(middleware.UserContextKey).(*middleware.UserClaims)
+	if ok && claims != nil && claims.UserID != "" {
+		analytics.LogActivity(h.AnalyticsServiceURL, analytics.Activity{
+			UserID:   claims.UserID,
+			Type:     analytics.ActivityTypeSongPlayed,
+			SongID:   id,
+			SongName: song.Name,
+		})
 	}
 
 	// Set headers for audio streaming

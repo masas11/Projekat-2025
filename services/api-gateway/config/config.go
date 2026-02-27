@@ -11,6 +11,7 @@ type Config struct {
 	SubscriptionsServiceURL string
 	RatingsServiceURL       string
 	RecommendationServiceURL string
+	AnalyticsServiceURL     string
 }
 
 func Load() *Config {
@@ -49,6 +50,11 @@ func Load() *Config {
 		recommendationURL = "http://localhost:8006"
 	}
 
+	analyticsURL := os.Getenv("ANALYTICS_SERVICE_URL")
+	if analyticsURL == "" {
+		analyticsURL = "http://localhost:8007"
+	}
+
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
 		jwtSecret = "your-secret-key-change-in-production" // Default, should match users-service
@@ -63,5 +69,6 @@ func Load() *Config {
 		SubscriptionsServiceURL:  subscriptionsURL,
 		RatingsServiceURL:        ratingsURL,
 		RecommendationServiceURL: recommendationURL,
+		AnalyticsServiceURL:      analyticsURL,
 	}
 }

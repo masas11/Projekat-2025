@@ -16,6 +16,7 @@ import (
 	"subscriptions-service/config"
 	"subscriptions-service/internal/model"
 	"subscriptions-service/internal/store"
+	"shared/analytics"
 	"shared/tracing"
 )
 
@@ -775,6 +776,13 @@ func main() {
 			}
 
 			log.Printf("User %s subscribed to artist %s", userID, artistID)
+			// Log activity (1.15)
+			analytics.LogActivity(cfg.AnalyticsServiceURL, analytics.Activity{
+				UserID:     userID,
+				Type:       analytics.ActivityTypeArtistSubscribed,
+				ArtistID:   artistID,
+				ArtistName: artistName,
+			})
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("Subscribed to artist successfully"))
 		} else if r.Method == http.MethodDelete {
@@ -807,6 +815,12 @@ func main() {
 			}
 
 			log.Printf("User %s unsubscribed from artist %s", userID, artistID)
+			// Log activity (1.15)
+			analytics.LogActivity(cfg.AnalyticsServiceURL, analytics.Activity{
+				UserID:     userID,
+				Type:       analytics.ActivityTypeArtistUnsubscribed,
+				ArtistID:   artistID,
+			})
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("Unsubscribed from artist successfully"))
 		} else {
@@ -877,6 +891,12 @@ func main() {
 			log.Printf("User %s subscribed to genre %s", userID, genre)
 			// Emit event to recommendation-service
 			emitSubscriptionEvent(cfg.RecommendationServiceURL, userID, genre, "subscription_created")
+			// Log activity (1.15)
+			analytics.LogActivity(cfg.AnalyticsServiceURL, analytics.Activity{
+				UserID: userID,
+				Type:   analytics.ActivityTypeGenreSubscribed,
+				Genre:  genre,
+			})
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("Subscribed to genre successfully"))
 		} else if r.Method == http.MethodDelete {
@@ -914,6 +934,12 @@ func main() {
 			log.Printf("User %s unsubscribed from genre %s", userID, genre)
 			// Emit event to recommendation-service
 			emitSubscriptionEvent(cfg.RecommendationServiceURL, userID, genre, "subscription_deleted")
+			// Log activity (1.15)
+			analytics.LogActivity(cfg.AnalyticsServiceURL, analytics.Activity{
+				UserID: userID,
+				Type:   analytics.ActivityTypeGenreUnsubscribed,
+				Genre:  genre,
+			})
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("Unsubscribed from genre successfully"))
 		} else {

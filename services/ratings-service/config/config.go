@@ -6,6 +6,7 @@ type Config struct {
 	Port                   string
 	ContentServiceURL      string
 	RecommendationServiceURL string
+	AnalyticsServiceURL    string
 }
 
 func Load() *Config {
@@ -24,9 +25,15 @@ func Load() *Config {
 		recommendationURL = "http://recommendation-service:8006"
 	}
 
+	analyticsURL := os.Getenv("ANALYTICS_SERVICE_URL")
+	if analyticsURL == "" {
+		analyticsURL = "http://analytics-service:8007"
+	}
+
 	return &Config{
 		Port:                    port,
 		ContentServiceURL:       contentURL,
 		RecommendationServiceURL: recommendationURL,
+		AnalyticsServiceURL:     analyticsURL,
 	}
 }

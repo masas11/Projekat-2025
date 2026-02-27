@@ -674,7 +674,7 @@ func main() {
 
 	// GET /api/content/songs/{id} - get song by ID
 	// PUT /api/content/songs/{id} - update song (admin only)
-	// DELETE /api/content/songs/{id} - delete song (admin only)
+	// DELETE /api/content/songs/{id} - delete song via saga (admin only) (2.13)
 	// GET /api/content/songs/{id}/stream - stream song audio (public)
 	mux.HandleFunc("/api/content/songs/", func(w http.ResponseWriter, r *http.Request) {
 		// Handle preflight OPTIONS request
@@ -917,6 +917,85 @@ func main() {
 		log.Printf("Proxying analytics activities request to: %s", targetURL)
 		proxyRequest(w, r, targetURL, appLogger)
 	})))
+
+	// EVENT SOURCING ROUTES (2.14)
+	// GET /api/analytics/events/stream - get event stream for a user
+	mux.HandleFunc("/api/analytics/events/stream", globalRateLimit(requireNonAdmin(func(w http.ResponseWriter, r *http.Request) {
+		claims, ok := r.Context().Value(middleware.UserContextKey).(*middleware.UserClaims)
+		if !ok || claims == nil {
+			log.Printf("Failed to get user claims from context")
+			enableCORS(w, r)
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		query := r.URL.RawQuery
+		if query != "" {
+			query += "&userId=" + claims.UserID
+		} else {
+			query = "userId=" + claims.UserID
+		}
+
+		targetURL := cfg.AnalyticsServiceURL + "/events/stream?" + query
+		log.Printf("Proxying event stream request to: %s", targetURL)
+		proxyRequest(w, r, targetURL, appLogger)
+	})))
+
+	// GET /api/analytics/events/replay - replay events to reconstruct state
+	mux.HandleFunc("/api/analytics/events/replay", globalRateLimit(requireNonAdmin(func(w http.ResponseWriter, r *http.Request) {
+		claims, ok := r.Context().Value(middleware.UserContextKey).(*middleware.UserClaims)
+		if !ok || claims == nil {
+			log.Printf("Failed to get user claims from context")
+			enableCORS(w, r)
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		query := r.URL.RawQuery
+		if query != "" {
+			query += "&userId=" + claims.UserID
+		} else {
+			query = "userId=" + claims.UserID
+		}
+
+		targetURL := cfg.AnalyticsServiceURL + "/events/replay?" + query
+		log.Printf("Proxying event replay request to: %s", targetURL)
+		proxyRequest(w, r, targetURL, appLogger)
+	})))
+
+	// SAGA SERVICE ROUTES (2.13)
+	// POST /api/sagas/delete-song - start saga transaction for song deletion (admin only)
+	mux.HandleFunc("/api/sagas/delete-song", globalRateLimit(middleware.RequireRole("ADMIN", cfg, appLogger)(func(w http.ResponseWriter, r *http.Request) {
+		enableCORS(w, r)
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		if r.Method == http.MethodPost {
+			proxyRequest(w, r, cfg.SagaServiceURL+"/sagas/delete-song", appLogger)
+		} else {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	})))
+
+	// GET /api/sagas/{id} - get saga transaction status
+	mux.HandleFunc("/api/sagas/", func(w http.ResponseWriter, r *http.Request) {
+		enableCORS(w, r)
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		if r.Method == http.MethodGet {
+			sagaID := r.URL.Path[len("/api/sagas/"):]
+			if sagaID == "" {
+				http.Error(w, "saga ID is required", http.StatusBadRequest)
+				return
+			}
+			proxyRequest(w, r, cfg.SagaServiceURL+"/sagas/"+sagaID, appLogger)
+		} else {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
 
 	// Note: Root endpoint "/" is intentionally not registered
 	// In Go ServeMux, "/" is a catch-all that would interfere with other routes

@@ -46,9 +46,11 @@ func main() {
 
 	db := mongoClient.Database(cfg.MongoDBDatabase)
 	activityStore := store.NewActivityStore(db)
-	activityHandler := handler.NewActivityHandler(activityStore)
+	eventStore := store.NewEventStore(db) // Event Sourcing (2.14)
+	activityHandler := handler.NewActivityHandler(activityStore, eventStore)
 
 	log.Printf("Connected to MongoDB at %s, database: %s", cfg.MongoDBURI, cfg.MongoDBDatabase)
+	log.Println("Event Store initialized for Event Sourcing (2.14)")
 
 	// Setup routes
 	mux := http.NewServeMux()
@@ -58,7 +60,7 @@ func main() {
 		w.Write([]byte("analytics-service is running"))
 	})
 
-	// Activity endpoints
+	// Activity endpoints (backward compatible)
 	mux.HandleFunc("/activities", func(w http.ResponseWriter, r *http.Request) {
 		// Add CORS headers
 		w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -77,6 +79,45 @@ func main() {
 		case http.MethodGet:
 			activityHandler.GetUserActivities(w, r)
 		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	// Event Sourcing endpoints (2.14)
+	mux.HandleFunc("/events/stream", func(w http.ResponseWriter, r *http.Request) {
+		// Add CORS headers
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+		// Handle preflight request
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		if r.Method == http.MethodGet {
+			activityHandler.GetEventStream(w, r)
+		} else {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	mux.HandleFunc("/events/replay", func(w http.ResponseWriter, r *http.Request) {
+		// Add CORS headers
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+		// Handle preflight request
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		if r.Method == http.MethodGet {
+			activityHandler.ReplayEvents(w, r)
+		} else {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
 	})

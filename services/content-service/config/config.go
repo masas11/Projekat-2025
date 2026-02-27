@@ -13,6 +13,7 @@ type Config struct {
 	AnalyticsServiceURL     string
 	HDFSNamenodeURL         string
 	RedisURL                string
+	SagaServiceURL          string
 }
 
 func Load() *Config {
@@ -66,6 +67,11 @@ func Load() *Config {
 		redisURL = "redis:6379"
 	}
 
+	sagaServiceURL := os.Getenv("SAGA_SERVICE_URL")
+	if sagaServiceURL == "" {
+		sagaServiceURL = "http://saga-service:8008"
+	}
+
 	return &Config{
 		Port:                     port,
 		MongoDBURI:               mongoURI,
@@ -77,5 +83,6 @@ func Load() *Config {
 		AnalyticsServiceURL:      analyticsServiceURL,
 		HDFSNamenodeURL:          hdfsNamenodeURL,
 		RedisURL:                 redisURL,
+		SagaServiceURL:           sagaServiceURL,
 	}
 }

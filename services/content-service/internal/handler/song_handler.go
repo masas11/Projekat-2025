@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -38,12 +39,13 @@ type SongHandler struct {
 	RecommendationServiceURL  string
 	RatingsServiceURL        string
 	AnalyticsServiceURL      string
+	SagaServiceURL           string // (2.13)
 	Logger                   *logger.Logger
 	HDFSClient               *storage.HDFSClient
 	RedisCache               *cache.RedisCache // (2.12)
 }
 
-func NewSongHandler(repo *store.SongRepository, albumRepo *store.AlbumRepository, artistRepo *store.ArtistRepository, subscriptionsServiceURL, recommendationServiceURL, ratingsServiceURL, analyticsServiceURL string, log *logger.Logger, hdfsClient *storage.HDFSClient, redisCache *cache.RedisCache) *SongHandler {
+func NewSongHandler(repo *store.SongRepository, albumRepo *store.AlbumRepository, artistRepo *store.ArtistRepository, subscriptionsServiceURL, recommendationServiceURL, ratingsServiceURL, analyticsServiceURL, sagaServiceURL string, log *logger.Logger, hdfsClient *storage.HDFSClient, redisCache *cache.RedisCache) *SongHandler {
 	return &SongHandler{
 		Repo:                     repo,
 		AlbumRepo:                albumRepo,
@@ -52,6 +54,7 @@ func NewSongHandler(repo *store.SongRepository, albumRepo *store.AlbumRepository
 		RecommendationServiceURL: recommendationServiceURL,
 		RatingsServiceURL:        ratingsServiceURL,
 		AnalyticsServiceURL:      analyticsServiceURL,
+		SagaServiceURL:           sagaServiceURL,
 		Logger:                   log,
 		HDFSClient:               hdfsClient,
 		RedisCache:               redisCache,
@@ -355,11 +358,72 @@ func (h *SongHandler) DeleteSong(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get song before deletion for logging and events
+	// Get song before deletion for logging
 	song, _ := h.Repo.GetByID(r.Context(), id)
 
+	// Use Saga pattern for distributed transaction (2.13)
+	if h.SagaServiceURL != "" {
+		// Call saga-service to orchestrate the deletion
+		client := &http.Client{Timeout: 30 * time.Second}
+		sagaURL := fmt.Sprintf("%s/sagas/delete-song", h.SagaServiceURL)
+		
+		reqBody := map[string]interface{}{
+			"songId": id,
+		}
+		reqJSON, err := json.Marshal(reqBody)
+		if err != nil {
+			log.Printf("Error marshaling saga request: %v", err)
+			http.Error(w, "failed to create saga request", http.StatusInternalServerError)
+			return
+		}
+
+		req, err := http.NewRequestWithContext(r.Context(), "POST", sagaURL, bytes.NewBuffer(reqJSON))
+		if err != nil {
+			log.Printf("Error creating saga request: %v", err)
+			http.Error(w, "failed to create saga request", http.StatusInternalServerError)
+			return
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Printf("Error calling saga-service: %v", err)
+			http.Error(w, "failed to execute saga transaction", http.StatusInternalServerError)
+			return
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			var sagaResp map[string]interface{}
+			if err := json.NewDecoder(resp.Body).Decode(&sagaResp); err == nil {
+				if errorMsg, ok := sagaResp["error"].(string); ok {
+					log.Printf("Saga transaction failed: %s", errorMsg)
+					http.Error(w, fmt.Sprintf("Saga transaction failed: %s", errorMsg), http.StatusInternalServerError)
+					return
+				}
+			}
+			http.Error(w, "saga transaction failed", http.StatusInternalServerError)
+			return
+		}
+
+		// Log admin activity
+		if h.Logger != nil {
+			adminID := getAdminIDFromSongContext(r.Context())
+			h.Logger.LogAdminActivity(adminID, "DELETE_SONG", "songs", map[string]interface{}{
+				"songId": id,
+				"name":   song.Name,
+				"method": "saga",
+			})
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	// Fallback to old implementation if saga-service is not available
+	log.Printf("Saga service not configured, using direct deletion")
+	
 	// Delete all ratings for this song from ratings-service
-	// This should be done before deleting the song to ensure data consistency
 	if h.RatingsServiceURL != "" {
 		go func() {
 			client := &http.Client{Timeout: 5 * time.Second}
@@ -391,9 +455,6 @@ func (h *SongHandler) DeleteSong(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Emit deletion event to recommendation-service (asynchronous)
-	// This will delete the song from Neo4j graph and all related recommendations
-	// Use context.Background() instead of r.Context() because the HTTP request context
-	// gets canceled when the response is sent, but we need the event to be sent asynchronously
 	if song != nil {
 		events.EmitEvent(context.Background(), h.RecommendationServiceURL, events.DeletedSongEvent{
 			Type:   events.EventTypeDeletedSong,

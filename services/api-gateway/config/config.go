@@ -12,6 +12,7 @@ type Config struct {
 	RatingsServiceURL       string
 	RecommendationServiceURL string
 	AnalyticsServiceURL     string
+	SagaServiceURL          string
 }
 
 func Load() *Config {
@@ -55,6 +56,11 @@ func Load() *Config {
 		analyticsURL = "http://localhost:8007"
 	}
 
+	sagaURL := os.Getenv("SAGA_SERVICE_URL")
+	if sagaURL == "" {
+		sagaURL = "http://localhost:8008"
+	}
+
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
 		jwtSecret = "your-secret-key-change-in-production" // Default, should match users-service
@@ -70,5 +76,6 @@ func Load() *Config {
 		RatingsServiceURL:        ratingsURL,
 		RecommendationServiceURL: recommendationURL,
 		AnalyticsServiceURL:      analyticsURL,
+		SagaServiceURL:           sagaURL,
 	}
 }

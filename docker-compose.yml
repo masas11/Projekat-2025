@@ -14,6 +14,7 @@ services:
       - RATINGS_SERVICE_URL=http://ratings-service:8003
       - RECOMMENDATION_SERVICE_URL=http://recommendation-service:8006
       - ANALYTICS_SERVICE_URL=http://analytics-service:8007
+      - SAGA_SERVICE_URL=http://saga-service:8008
       # TLS_CERT_FILE and TLS_KEY_FILE removed for development - API Gateway will use HTTP
       # - TLS_CERT_FILE=/app/certs/server.crt
       # - TLS_KEY_FILE=/app/certs/server.key
@@ -99,6 +100,7 @@ services:
       - ANALYTICS_SERVICE_URL=http://analytics-service:8007
       - HDFS_NAMENODE_URL=http://hdfs-namenode:9870
       - REDIS_URL=redis:6379
+      - SAGA_SERVICE_URL=http://saga-service:8008
       # TLS_CERT_FILE and TLS_KEY_FILE removed for development
       # - TLS_CERT_FILE=/app/certs/server.crt
       # - TLS_KEY_FILE=/app/certs/server.key
@@ -325,6 +327,41 @@ services:
     depends_on:
       mongodb-analytics:
         condition: service_healthy
+    networks:
+      - music-streaming-network
+
+  # Saga Service (2.13) - Orchestrates distributed transactions
+  saga-service:
+    build:
+      context: ./services
+      dockerfile: saga-service/Dockerfile
+    ports:
+      - "8008:8008"
+    environment:
+      - PORT=8008
+      - CONTENT_SERVICE_URL=http://content-service:8002
+      - RATINGS_SERVICE_URL=http://ratings-service:8003
+      - RECOMMENDATION_SERVICE_URL=http://recommendation-service:8006
+      - MONGODB_URI=mongodb://mongodb-saga:27017
+      - MONGODB_DATABASE=saga_db
+    depends_on:
+      mongodb-saga:
+        condition: service_healthy
+    networks:
+      - music-streaming-network
+
+  mongodb-saga:
+    image: mongo:7.0
+    ports:
+      - "27021:27017"
+    volumes:
+      - ./data/mongodb-saga:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
     networks:
       - music-streaming-network
 

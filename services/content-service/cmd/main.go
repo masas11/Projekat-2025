@@ -72,7 +72,7 @@ func main() {
 	// Initialize handlers
 	artistHandler := handler.NewArtistHandler(artistRepo, cfg.SubscriptionsServiceURL, cfg.RecommendationServiceURL, appLogger)
 	albumHandler := handler.NewAlbumHandler(albumRepo, artistRepo, cfg.SubscriptionsServiceURL, cfg.RecommendationServiceURL, appLogger)
-	songHandler := handler.NewSongHandler(songRepo, albumRepo, artistRepo, cfg.SubscriptionsServiceURL, cfg.RecommendationServiceURL, cfg.RatingsServiceURL, cfg.AnalyticsServiceURL, appLogger, hdfsClient, redisCache)
+	songHandler := handler.NewSongHandler(songRepo, albumRepo, artistRepo, cfg.SubscriptionsServiceURL, cfg.RecommendationServiceURL, cfg.RatingsServiceURL, cfg.AnalyticsServiceURL, cfg.SagaServiceURL, appLogger, hdfsClient, redisCache)
 	
 	// Initialize most played handler (2.12)
 	var mostPlayedHandler *handler.MostPlayedHandler
@@ -233,6 +233,32 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]bool{"exists": exists})
+	})
+
+	// Direct delete endpoint for saga-service (2.13) - bypasses saga logic
+	mux.HandleFunc("/songs/internal/delete", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		songID := r.URL.Query().Get("songId")
+		if songID == "" {
+			http.Error(w, "songId parameter is required", http.StatusBadRequest)
+			return
+		}
+
+		// Direct deletion from MongoDB (for saga-service use only)
+		if err := songRepo.Delete(r.Context(), songID); err != nil {
+			if err.Error() == "song not found" {
+				http.Error(w, "song not found", http.StatusNotFound)
+				return
+			}
+			http.Error(w, "failed to delete song: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
 	})
 
 	// Most played songs endpoint (2.12)

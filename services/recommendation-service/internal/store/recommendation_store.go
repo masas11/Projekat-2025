@@ -166,15 +166,22 @@ func (s *Neo4jStore) GetSubscribedGenreSongs(ctx context.Context, userID string)
 
 	query := `
 		MATCH (u:User {id: $userID})-[:SUBSCRIBED_TO]->(g:Genre)<-[:BELONGS_TO]-(s:Song)
-		OPTIONAL MATCH (u)-[r:RATED]->(s)
-		WITH s, g, r, CASE WHEN r IS NULL THEN true ELSE r.rating >= 4 END AS shouldInclude
-		WHERE shouldInclude = true
 		OPTIONAL MATCH (s)-[:PERFORMED_BY]->(a:Artist)
-		WITH DISTINCT s, g, collect(a.id) AS artistIds
+		OPTIONAL MATCH (u)-[userRating:RATED]->(s)
+		OPTIONAL MATCH (otherUser:User)-[r:RATED]->(s)
+		WITH s, g, collect(DISTINCT a.id) AS artistIds, 
+		     userRating.rating AS userRatingValue,
+		     [rating IN collect(r.rating) WHERE rating IS NOT NULL] AS allRatings
+		WITH s, g, artistIds, userRatingValue,
+		     CASE WHEN size(allRatings) = 0 THEN 0.0 
+		          ELSE reduce(sum = 0.0, rating IN allRatings | sum + rating) / size(allRatings)
+		     END AS avgRating
+		WHERE (userRatingValue IS NULL OR userRatingValue >= 4) AND (avgRating >= 4.0 OR size(allRatings) = 0)
+		WITH DISTINCT s, g, artistIds
 		RETURN s.id AS songId, s.name AS name, g.name AS genre, 
 		       s.albumId AS albumId, s.duration AS duration, artistIds
 		ORDER BY rand()
-		LIMIT 50
+		LIMIT 5
 	`
 
 	result, err := session.Run(ctx, query, map[string]interface{}{
@@ -243,16 +250,17 @@ func (s *Neo4jStore) GetTopRatedSongFromUnsubscribedGenre(ctx context.Context, u
 
 	query := `
 		OPTIONAL MATCH (u:User {id: $userID})-[:SUBSCRIBED_TO]->(subscribedGenre:Genre)
-		WITH collect(DISTINCT subscribedGenre.name) AS subscribedGenres
+		WITH collect(DISTINCT toLower(subscribedGenre.name)) AS subscribedGenres
 		MATCH (s:Song)-[:BELONGS_TO]->(g:Genre)
-		WHERE (size(subscribedGenres) = 0 OR NOT g.name IN subscribedGenres)
+		WHERE (size(subscribedGenres) = 0 OR NOT toLower(g.name) IN subscribedGenres)
 		OPTIONAL MATCH (otherUser:User)-[r:RATED {rating: 5}]->(s)
 		OPTIONAL MATCH (s)-[:PERFORMED_BY]->(a:Artist)
-		WITH s, g, count(r) AS fiveStarCount, collect(a.id) AS artistIds
-		ORDER BY fiveStarCount DESC
+		WITH s, g, collect(DISTINCT a.id) AS artistIds, count(r) AS fiveStarCount
+		WITH DISTINCT s, g, artistIds, fiveStarCount
+		ORDER BY fiveStarCount DESC, rand()
 		LIMIT 1
 		RETURN s.id AS songId, s.name AS name, g.name AS genre, 
-		       s.albumId AS albumId, s.duration AS duration, artistIds, fiveStarCount
+		       s.albumId AS albumId, s.duration AS duration, artistIds
 	`
 
 	result, err := session.Run(ctx, query, map[string]interface{}{

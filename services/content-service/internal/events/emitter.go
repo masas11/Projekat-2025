@@ -74,8 +74,12 @@ type DeletedArtistEvent struct {
 // Tracing (2.10): Added context parameter for async tracing
 func EmitEvent(ctx context.Context, subscriptionsServiceURL string, event interface{}) {
 	go func() {
+		// Use background context for async operations to avoid cancellation
+		// when the original request context is cancelled
+		bgCtx := context.Background()
+		
 		// Start span for async event emission (2.10)
-		ctx, span := tracing.StartSpan(ctx, "emit.event")
+		eventCtx, span := tracing.StartSpan(bgCtx, "emit.event")
 		defer span.End()
 
 		eventJSON, err := json.Marshal(event)
@@ -85,7 +89,7 @@ func EmitEvent(ctx context.Context, subscriptionsServiceURL string, event interf
 		}
 
 		url := subscriptionsServiceURL + "/events"
-		req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(eventJSON))
+		req, err := http.NewRequestWithContext(eventCtx, "POST", url, bytes.NewBuffer(eventJSON))
 		if err != nil {
 			log.Printf("Failed to create event request: %v", err)
 			return
@@ -96,7 +100,7 @@ func EmitEvent(ctx context.Context, subscriptionsServiceURL string, event interf
 		// Propagate trace context to downstream service (2.10)
 		propagator := tracing.GetPropagator()
 		if propagator != nil {
-			propagator.Inject(ctx, propagation.HeaderCarrier(req.Header))
+			propagator.Inject(eventCtx, propagation.HeaderCarrier(req.Header))
 		}
 
 		// Configure TLS transport for HTTPS
@@ -104,7 +108,7 @@ func EmitEvent(ctx context.Context, subscriptionsServiceURL string, event interf
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		}
 		client := &http.Client{
-			Timeout:   2 * time.Second,
+			Timeout:   10 * time.Second, // Increased timeout for event delivery
 			Transport: tr,
 		}
 

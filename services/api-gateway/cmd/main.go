@@ -334,6 +334,108 @@ func composeSongsWithRatings(w http.ResponseWriter, r *http.Request, cfg *config
 	json.NewEncoder(w).Encode(songs)
 }
 
+// composeSongWithRatings implements API Composition pattern for a single song
+func composeSongWithRatings(w http.ResponseWriter, r *http.Request, songID string, cfg *config.Config, appLogger *logger.Logger) {
+	enableCORS(w, r)
+
+	// Step 1: Get song from content-service
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	contentURL := cfg.ContentServiceURL + "/songs/" + songID
+	contentReq, err := http.NewRequestWithContext(ctx, "GET", contentURL, nil)
+	if err != nil {
+		http.Error(w, "Failed to create request", http.StatusInternalServerError)
+		return
+	}
+
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	client := &http.Client{
+		Timeout:   5 * time.Second,
+		Transport: tr,
+	}
+	// Wrap client with tracing (2.10)
+	client = tracing.HTTPClient(client)
+
+	contentResp, err := client.Do(contentReq)
+	if err != nil {
+		log.Printf("Error calling content-service: %v", err)
+		http.Error(w, "Content service unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	defer contentResp.Body.Close()
+
+	if contentResp.StatusCode != http.StatusOK {
+		http.Error(w, "Failed to get song", contentResp.StatusCode)
+		return
+	}
+
+	var song map[string]interface{}
+	if err := json.NewDecoder(contentResp.Body).Decode(&song); err != nil {
+		log.Printf("Error decoding song: %v", err)
+		http.Error(w, "Failed to decode song", http.StatusInternalServerError)
+		return
+	}
+
+	// Step 2: Get average rating and count from ratings-service
+	ratingCtx, ratingCancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer ratingCancel()
+
+	ratingURL := cfg.RatingsServiceURL + "/average-rating?songId=" + songID
+	ratingReq, err := http.NewRequestWithContext(ratingCtx, "GET", ratingURL, nil)
+	if err != nil {
+		// If ratings-service is unavailable, return song without ratings
+		song["averageRating"] = 0.0
+		song["ratingCount"] = 0
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(song)
+		return
+	}
+
+	ratingClient := &http.Client{
+		Timeout:   3 * time.Second,
+		Transport: tr,
+	}
+	// Wrap client with tracing (2.10)
+	ratingClient = tracing.HTTPClient(ratingClient)
+
+	ratingResp, err := ratingClient.Do(ratingReq)
+	if err != nil {
+		// If ratings-service is unavailable, use default values
+		song["averageRating"] = 0.0
+		song["ratingCount"] = 0
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(song)
+		return
+	}
+	defer ratingResp.Body.Close()
+
+	if ratingResp.StatusCode == http.StatusOK {
+		var ratingData map[string]interface{}
+		if err := json.NewDecoder(ratingResp.Body).Decode(&ratingData); err == nil {
+			avg, _ := ratingData["averageRating"].(float64)
+			count, _ := ratingData["ratingCount"].(float64)
+			song["averageRating"] = avg
+			song["ratingCount"] = int(count)
+		} else {
+			song["averageRating"] = 0.0
+			song["ratingCount"] = 0
+		}
+	} else {
+		song["averageRating"] = 0.0
+		song["ratingCount"] = 0
+	}
+
+	// Step 3: Return composed response
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(song)
+}
+
 // composeSongsByAlbumWithRatings implements API Composition pattern for songs by album
 func composeSongsByAlbumWithRatings(w http.ResponseWriter, r *http.Request, cfg *config.Config, appLogger *logger.Logger) {
 	enableCORS(w, r)
@@ -712,7 +814,8 @@ func main() {
 		// Handle specific song ID routes (GET, PUT, DELETE)
 		if path != "" && !strings.Contains(path, "/") {
 			if r.Method == http.MethodGet {
-				proxyRequest(w, r, cfg.ContentServiceURL+"/songs/"+path, appLogger)
+				// API Composition: Combine song from content-service with ratings from ratings-service
+				composeSongWithRatings(w, r, path, cfg, appLogger)
 			} else if r.Method == http.MethodPut {
 				middleware.RequireRole("ADMIN", cfg, appLogger)(func(w http.ResponseWriter, r *http.Request) {
 					proxyRequest(w, r, cfg.ContentServiceURL+"/songs/"+path, appLogger)

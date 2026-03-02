@@ -109,6 +109,7 @@ services:
     volumes:
       - ./certs:/app/certs:ro
       - ./logs/content-service:/app/logs
+      - ./frontend/public/music:/app/music:ro
     depends_on:
       mongodb-content:
         condition: service_started

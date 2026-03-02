@@ -1,2 +1,0 @@
-1.1 Registracija naloga (uloge: NK)
-Svaki nalog mora imati jedinstven username. Minimalan skup ličnih podataka koje korisnik mora uneti pri registraciji je: ime, prezime, imejl adresa, lozinka i ponovljena lozinka. Nametnuti korisniku upotrebu jake lozinke, kao i periodičnu promenu lozinke. Implementirati potvrdu registracije.

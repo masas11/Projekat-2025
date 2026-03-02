@@ -9,6 +9,7 @@ const AudioPlayer = ({ songId, songName, audioFileUrl }) => {
   const [volume, setVolume] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [cacheBuster, setCacheBuster] = useState(Date.now());
   
   const audioRef = useRef(null);
   const progressBarRef = useRef(null);
@@ -21,6 +22,8 @@ const AudioPlayer = ({ songId, songName, audioFileUrl }) => {
       } else {
         setError(''); // Clear error if URL is valid
       }
+      // Update cache buster when audioFileUrl changes
+      setCacheBuster(Date.now());
     }
   }, [audioFileUrl]);
 
@@ -32,8 +35,28 @@ const AudioPlayer = ({ songId, songName, audioFileUrl }) => {
     const updateDuration = () => setDuration(audio.duration);
     const handleLoadStart = () => setIsLoading(true);
     const handleCanPlay = () => setIsLoading(false);
-    const handleError = () => {
-      setError('Greška pri učitavanju audio fajla');
+    const handleError = (e) => {
+      const audio = audioRef.current;
+      if (audio && audio.error) {
+        let errorMsg = 'Greška pri učitavanju audio fajla';
+        switch (audio.error.code) {
+          case audio.error.MEDIA_ERR_ABORTED:
+            errorMsg = 'Reprodukcija je prekinuta';
+            break;
+          case audio.error.MEDIA_ERR_NETWORK:
+            errorMsg = 'Greška u mreži - audio fajl nije dostupan';
+            break;
+          case audio.error.MEDIA_ERR_DECODE:
+            errorMsg = 'Greška pri dekodiranju audio fajla';
+            break;
+          case audio.error.MEDIA_ERR_SRC_NOT_SUPPORTED:
+            errorMsg = 'Audio fajl nije dostupan ili format nije podržan';
+            break;
+        }
+        setError(errorMsg);
+      } else {
+        setError('Greška pri učitavanju audio fajla');
+      }
       setIsLoading(false);
     };
 
@@ -41,7 +64,7 @@ const AudioPlayer = ({ songId, songName, audioFileUrl }) => {
     audio.addEventListener('loadedmetadata', updateDuration);
     audio.addEventListener('loadstart', handleLoadStart);
     audio.addEventListener('canplay', handleCanPlay);
-    audio.addEventListener('error', handleError);
+    audio.addEventListener('error', (e) => handleError(e));
 
     return () => {
       audio.removeEventListener('timeupdate', updateTime);
@@ -52,19 +75,33 @@ const AudioPlayer = ({ songId, songName, audioFileUrl }) => {
     };
   }, []);
 
-  const togglePlayPause = () => {
+  const togglePlayPause = async () => {
     const audio = audioRef.current;
     if (!audio) return;
 
     if (isPlaying) {
       audio.pause();
+      setIsPlaying(false);
     } else {
-      audio.play().catch(err => {
+      // Check if audio source is valid before trying to play
+      if (!audio.src || audio.src === '') {
+        setError('Audio fajl nije dostupan za ovu pesmu');
+        return;
+      }
+      
+      try {
+        await audio.play();
+        setIsPlaying(true);
+      } catch (err) {
         console.error('Audio playback error:', err);
-        setError('Greška pri reprodukciji: ' + err.message);
-      });
+        if (err.name === 'NotSupportedError' || err.message.includes('no supported sources')) {
+          setError('Audio fajl nije dostupan. Molimo upload-ujte audio fajl za ovu pesmu.');
+        } else {
+          setError('Greška pri reprodukciji: ' + err.message);
+        }
+        setIsPlaying(false);
+      }
     }
-    setIsPlaying(!isPlaying);
   };
 
   const handleSeek = (e) => {
@@ -98,18 +135,32 @@ const AudioPlayer = ({ songId, songName, audioFileUrl }) => {
   };
 
   const getAudioUrl = () => {
-    // If song has HDFS path (starts with /audio/), use stream endpoint
+    if (!songId) {
+      console.warn('No songId provided to AudioPlayer');
+      return null;
+    }
+    
+    // If song has HDFS path (starts with /audio/), use stream endpoint with cache-busting
     if (audioFileUrl && (audioFileUrl.startsWith('/audio/') || audioFileUrl.startsWith('hdfs://'))) {
-      return api.getStreamUrl(songId);
+      const baseUrl = api.getStreamUrl(songId);
+      // Remove existing timestamp and add new one
+      const url = baseUrl.split('&t=')[0].split('?t=')[0];
+      const separator = url.includes('?') ? '&' : '?';
+      return `${url}${separator}t=${cacheBuster}`;
     }
     
-    // If song has external URL (http/https), use it directly
+    // If song has external URL (http/https), use it directly with cache-busting
     if (audioFileUrl && (audioFileUrl.startsWith('http://') || audioFileUrl.startsWith('https://'))) {
-      return audioFileUrl;
+      // Add cache-busting parameter to external URLs too
+      const separator = audioFileUrl.includes('?') ? '&' : '?';
+      return `${audioFileUrl}${separator}t=${cacheBuster}`;
     }
     
-    // Otherwise, use the streaming endpoint
-    return api.getStreamUrl(songId);
+    // Otherwise, use the streaming endpoint with cache-busting
+    const baseUrl = api.getStreamUrl(songId);
+    const url = baseUrl.split('&t=')[0].split('?t=')[0];
+    const separator = url.includes('?') ? '&' : '?';
+    return `${url}${separator}t=${cacheBuster}`;
   };
 
   return (
@@ -120,13 +171,18 @@ const AudioPlayer = ({ songId, songName, audioFileUrl }) => {
       
       {error && <div className="audio-error">{error}</div>}
       
-      <audio
-        ref={audioRef}
-        src={getAudioUrl()}
-        preload="metadata"
-        controls
-        style={{ width: '100%', marginBottom: '10px' }}
-      />
+      {getAudioUrl() ? (
+        <audio
+          key={audioFileUrl || songId} // Force re-render when audioFileUrl changes
+          ref={audioRef}
+          src={getAudioUrl()}
+          preload="metadata"
+          controls
+          style={{ width: '100%', marginBottom: '10px' }}
+        />
+      ) : (
+        <div className="audio-error">Audio URL nije dostupan</div>
+      )}
       
       <div className="audio-controls">
         <button 

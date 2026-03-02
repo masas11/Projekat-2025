@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -489,7 +490,50 @@ func (h *SongHandler) StreamSong(w http.ResponseWriter, r *http.Request) {
 	// Check if song exists
 	song, err := h.Repo.GetByID(r.Context(), id)
 	if err != nil {
-		http.Error(w, "song not found", http.StatusNotFound)
+		// If song not found, try to serve from HDFS directly by ID (fallback)
+		hdfsPath := fmt.Sprintf("/audio/songs/%s.mp3", id)
+		exists, err := h.HDFSClient.FileExists(hdfsPath)
+		if err == nil && exists {
+			// File exists on HDFS, serve it directly
+			if h.Logger != nil {
+				h.Logger.Log(logger.LevelInfo, logger.EventStateChange, "Serving audio from HDFS (song not in DB)", map[string]interface{}{
+					"songId":   id,
+					"hdfsPath": hdfsPath,
+				})
+			}
+			audioData, err := h.HDFSClient.DownloadFile(hdfsPath)
+			if err == nil {
+				w.Header().Set("Content-Type", "audio/mpeg")
+				w.Header().Set("Content-Length", fmt.Sprintf("%d", len(audioData)))
+				w.Header().Set("Accept-Ranges", "bytes")
+				w.Header().Set("Cache-Control", "no-cache")
+				w.WriteHeader(http.StatusOK)
+				w.Write(audioData)
+				return
+			}
+			if h.Logger != nil {
+				h.Logger.Log(logger.LevelError, logger.EventStateChange, "Failed to download audio from HDFS (fallback)", map[string]interface{}{
+					"error":    err.Error(),
+					"songId":   id,
+					"hdfsPath": hdfsPath,
+				})
+			}
+		} else {
+			if h.Logger != nil {
+				h.Logger.Log(logger.LevelError, logger.EventStateChange, "Song not found and HDFS file missing", map[string]interface{}{
+					"songId":   id,
+					"hdfsPath": hdfsPath,
+					"exists":   exists,
+					"error":    err,
+				})
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "Song not found and audio file not available on HDFS",
+			"songId": id,
+		})
 		return
 	}
 
@@ -585,6 +629,27 @@ func (h *SongHandler) StreamSong(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
+			// Check if file exists in HDFS before trying to download
+			exists, err := h.HDFSClient.FileExists(hdfsPath)
+			if err != nil || !exists {
+				if h.Logger != nil {
+					h.Logger.Log(logger.LevelError, logger.EventStateChange, "Audio file not found in HDFS", map[string]interface{}{
+						"error":    err,
+						"songId":   id,
+						"hdfsPath": hdfsPath,
+						"exists":   exists,
+					})
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusNotFound)
+				json.NewEncoder(w).Encode(map[string]string{
+					"error": "Audio file not found in HDFS",
+					"song":  song.Name,
+					"path":  hdfsPath,
+				})
+				return
+			}
+
 			audioData, err := h.HDFSClient.DownloadFile(hdfsPath)
 			if err != nil {
 				if h.Logger != nil {
@@ -594,7 +659,7 @@ func (h *SongHandler) StreamSong(w http.ResponseWriter, r *http.Request) {
 						"hdfsPath": hdfsPath,
 					})
 				}
-				http.Error(w, "failed to retrieve audio file", http.StatusInternalServerError)
+				http.Error(w, "failed to retrieve audio file: "+err.Error(), http.StatusInternalServerError)
 				return
 			}
 
@@ -619,6 +684,25 @@ func (h *SongHandler) StreamSong(w http.ResponseWriter, r *http.Request) {
 			// Stream the audio data
 			w.WriteHeader(http.StatusOK)
 			w.Write(audioData)
+			return
+		}
+
+		// Check if it's a path to frontend/public/music files
+		if strings.HasPrefix(song.AudioFileURL, "/music/") || strings.HasPrefix(song.AudioFileURL, "music/") {
+			// Try to serve from /app/music directory (mounted from frontend/public/music)
+			fileName := strings.TrimPrefix(song.AudioFileURL, "/music/")
+			fileName = strings.TrimPrefix(fileName, "music/")
+			musicPath := filepath.Join("/app/music", fileName)
+			
+			// Check if file exists
+			if _, err := os.Stat(musicPath); err == nil {
+				http.ServeFile(w, r, musicPath)
+				return
+			}
+			
+			// Fallback: redirect to frontend public folder
+			frontendURL := fmt.Sprintf("http://localhost:3000/music/%s", fileName)
+			http.Redirect(w, r, frontendURL, http.StatusTemporaryRedirect)
 			return
 		}
 
@@ -722,6 +806,17 @@ func (h *SongHandler) UploadAudio(w http.ResponseWriter, r *http.Request) {
 	// Upload to HDFS (2.11)
 	hdfsPath := fmt.Sprintf("/audio/songs/%s%s", songID, ext)
 	log.Printf("Uploading to HDFS: %s", hdfsPath)
+	
+	// Delay to ensure HDFS is ready (especially for newly created songs)
+	// Check if this is a newly created song (no existing audioFileUrl or not HDFS path)
+	isNewSong := song.AudioFileURL == "" || (!strings.HasPrefix(song.AudioFileURL, "/audio/") && !strings.HasPrefix(song.AudioFileURL, "hdfs://"))
+	if isNewSong {
+		log.Printf("New song or non-HDFS path detected, waiting longer for HDFS to be ready...")
+		time.Sleep(2 * time.Second) // Wait 2 seconds for new songs
+	} else {
+		time.Sleep(1 * time.Second) // Wait 1 second for existing HDFS songs (to avoid connection issues)
+	}
+	
 	err = h.HDFSClient.UploadData(fileData, hdfsPath)
 	if err != nil {
 		log.Printf("HDFS upload failed: %v", err)

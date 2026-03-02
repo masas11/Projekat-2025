@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -310,7 +311,9 @@ func handleNewArtistEvent(ctx context.Context, event map[string]interface{}, rep
 
 	// For each genre, find subscribers and notify them
 	for genre := range genreMap {
-		subscriptions, err := repo.GetByGenre(ctx, genre)
+		// Normalize genre to lowercase for case-insensitive matching
+		normalizedGenre := strings.ToLower(strings.TrimSpace(genre))
+		subscriptions, err := repo.GetByGenre(ctx, normalizedGenre)
 		if err != nil {
 			log.Printf("Error getting subscriptions for genre %s: %v", genre, err)
 			continue
@@ -385,8 +388,10 @@ func handleNewAlbumEvent(ctx context.Context, event map[string]interface{}, repo
 
 	// Also notify users subscribed to the genre (if genre is provided)
 	if genre != "" {
-		log.Printf("[GENRE] Checking genre subscriptions for album genre: '%s'", genre)
-		genreSubscriptions, err := repo.GetByGenre(ctx, genre)
+		// Normalize genre to lowercase for case-insensitive matching
+		normalizedGenre := strings.ToLower(strings.TrimSpace(genre))
+		log.Printf("[GENRE] Checking genre subscriptions for album genre: '%s' (normalized: '%s')", genre, normalizedGenre)
+		genreSubscriptions, err := repo.GetByGenre(ctx, normalizedGenre)
 		if err != nil {
 			log.Printf("[GENRE] Error getting subscriptions for genre '%s': %v", genre, err)
 		} else {
@@ -476,8 +481,10 @@ func handleNewSongEvent(ctx context.Context, event map[string]interface{}, repo 
 
 	// Also notify users subscribed to the genre (if genre is provided)
 	if genre != "" {
-		log.Printf("[GENRE] Checking genre subscriptions for genre: '%s' (length: %d)", genre, len(genre))
-		genreSubscriptions, err := repo.GetByGenre(ctx, genre)
+		// Normalize genre to lowercase for case-insensitive matching
+		normalizedGenre := strings.ToLower(strings.TrimSpace(genre))
+		log.Printf("[GENRE] Checking genre subscriptions for genre: '%s' (normalized: '%s')", genre, normalizedGenre)
+		genreSubscriptions, err := repo.GetByGenre(ctx, normalizedGenre)
 		if err != nil {
 			log.Printf("[GENRE] Error getting subscriptions for genre '%s': %v", genre, err)
 		} else {
@@ -648,6 +655,27 @@ func main() {
 			return
 		}
 
+		// CQRS (2.9): Populate missing artistName for old subscriptions (lazy loading)
+		for i := range subscriptions {
+			if subscriptions[i].Type == "artist" && subscriptions[i].ArtistID != "" && subscriptions[i].ArtistName == "" {
+				// Get artist name from content-service and update subscription
+				artistName, exists := getArtistName(client, cfg.ContentServiceURL, subscriptions[i].ArtistID, contentServiceCB, ctx)
+				if exists && artistName != "" {
+					subscriptions[i].ArtistName = artistName
+					// Update subscription in database (async, don't block response)
+					go func(sub *model.Subscription) {
+						updateCtx, updateCancel := context.WithTimeout(context.Background(), 5*time.Second)
+						defer updateCancel()
+						// Update only artistName field
+						updateErr := subscriptionRepo.UpdateArtistName(updateCtx, sub.ID, artistName)
+						if updateErr != nil {
+							log.Printf("Failed to update artistName for subscription %s: %v", sub.ID, updateErr)
+						}
+					}(subscriptions[i])
+				}
+			}
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(subscriptions)
 	})
@@ -802,7 +830,32 @@ func main() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
-			err := subscriptionRepo.DeleteByUserAndArtist(ctx, userID, artistID)
+			// Get subscription before deletion to retrieve artistName
+			subscription, err := subscriptionRepo.GetByUserAndArtist(ctx, userID, artistID)
+			if err != nil {
+				log.Printf("Error getting subscription: %v", err)
+				http.Error(w, "failed to get subscription", http.StatusInternalServerError)
+				return
+			}
+			if subscription == nil {
+				w.WriteHeader(http.StatusNotFound)
+				w.Write([]byte("Subscription not found"))
+				return
+			}
+
+			// Get artistName from subscription (CQRS denormalized data)
+			artistName := subscription.ArtistName
+			// If artistName is not in subscription, fetch it from content-service
+			if artistName == "" {
+				var exists bool
+				artistName, exists = getArtistName(client, cfg.ContentServiceURL, artistID, contentServiceCB, ctx)
+				if !exists {
+					// Fallback to artistID if artist not found
+					artistName = artistID
+				}
+			}
+
+			err = subscriptionRepo.DeleteByUserAndArtist(ctx, userID, artistID)
 			if err != nil {
 				if err.Error() == "subscription not found" {
 					w.WriteHeader(http.StatusNotFound)
@@ -820,6 +873,7 @@ func main() {
 				UserID:     userID,
 				Type:       analytics.ActivityTypeArtistUnsubscribed,
 				ArtistID:   artistID,
+				ArtistName: artistName, // Include artistName in activity log
 			})
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("Unsubscribed from artist successfully"))
@@ -853,11 +907,14 @@ func main() {
 				return
 			}
 
+			// Normalize genre to lowercase for consistent matching and storage
+			normalizedGenre := strings.ToLower(strings.TrimSpace(genre))
+			
 			// Check if already subscribed
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
-			existing, err := subscriptionRepo.GetByUserAndGenre(ctx, userID, genre)
+			existing, err := subscriptionRepo.GetByUserAndGenre(ctx, userID, normalizedGenre)
 			if err != nil {
 				log.Printf("Error checking subscription: %v", err)
 				http.Error(w, "failed to check subscription", http.StatusInternalServerError)
@@ -868,15 +925,16 @@ func main() {
 				w.Write([]byte("Already subscribed to this genre"))
 				return
 			}
-
+			
 			// Create subscription
 			subscription := &model.Subscription{
 				UserID: userID,
 				Type:   "genre",
-				Genre:  genre,
+				Genre:  normalizedGenre,
 			}
 
-			err = subscriptionRepo.Create(ctx, subscription)
+			createErr := subscriptionRepo.Create(ctx, subscription)
+			err = createErr
 			if err != nil {
 				if err.Error() == "subscription already exists" {
 					w.WriteHeader(http.StatusConflict)
@@ -910,6 +968,9 @@ func main() {
 				return
 			}
 
+			// Normalize genre to lowercase for consistent matching
+			normalizedGenre := strings.ToLower(strings.TrimSpace(genre))
+
 			userID := r.URL.Query().Get("userId")
 			if userID == "" {
 				http.Error(w, "userId parameter is required", http.StatusBadRequest)
@@ -919,7 +980,7 @@ func main() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
-			err = subscriptionRepo.DeleteByUserAndGenre(ctx, userID, genre)
+			err = subscriptionRepo.DeleteByUserAndGenre(ctx, userID, normalizedGenre)
 			if err != nil {
 				if err.Error() == "subscription not found" {
 					w.WriteHeader(http.StatusNotFound)

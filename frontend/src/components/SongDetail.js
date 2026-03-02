@@ -17,10 +17,52 @@ const SongDetail = () => {
 
   useEffect(() => {
     loadSong();
-    if (isAuthenticated && user) {
+    // Only load user rating if user is authenticated, not null, and not admin
+    if (isAuthenticated && user && !isAdmin()) {
       loadUserRating();
     }
   }, [id, isAuthenticated, user]);
+
+  // Refresh song data when window regains focus (e.g., after returning from edit page)
+  useEffect(() => {
+    const handleFocus = () => {
+      if (id && !loading) {
+        loadSong();
+      }
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [id, loading]);
+
+  // Refresh song data when storage event is triggered (e.g., after audio upload from another tab)
+  useEffect(() => {
+    const handleStorageChange = (e) => {
+      if (e.key === 'songUpdated' && e.newValue === id) {
+        // Song was updated, reload data
+        setTimeout(() => {
+          loadSong();
+        }, 1000); // Wait 1 second for backend to finish updating
+        // Clear the flag
+        localStorage.removeItem('songUpdated');
+      }
+    };
+    
+    // Also listen for custom events (same window)
+    const handleSongUpdated = (e) => {
+      if (e.detail === id) {
+        setTimeout(() => {
+          loadSong();
+        }, 1000);
+      }
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('songUpdated', handleSongUpdated);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('songUpdated', handleSongUpdated);
+    };
+  }, [id]);
 
   const loadSong = async () => {
     try {
@@ -35,6 +77,18 @@ const SongDetail = () => {
 
   const loadUserRating = async () => {
     if (!isAuthenticated || !user) return;
+    
+    // Admin users cannot rate songs, so skip loading rating
+    if (isAdmin()) {
+      return;
+    }
+
+    // Check if token exists before making request
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.warn('No token found, skipping rating load');
+      return;
+    }
 
     try {
       const response = await api.getRating(id, user.id);
@@ -44,6 +98,12 @@ const SongDetail = () => {
         setUserRating(null);
       }
     } catch (err) {
+      // If 401, token might be invalid or expired
+      if (err.message && err.message.includes('401')) {
+        console.warn('Unauthorized access - token may be invalid or expired');
+        // Optionally logout user if token is invalid
+        // logout();
+      }
       // Rating doesn't exist, which is fine
       setUserRating(null);
     }
@@ -402,6 +462,29 @@ const SongDetail = () => {
                     >
                       {song.genre}
                     </span>
+                  </div>
+                )}
+
+                {/* API Composition: Average Rating and Rating Count */}
+                {(song.averageRating !== undefined || song.ratingCount !== undefined) && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '18px' }}>⭐</span>
+                    <span style={{ fontSize: '16px', color: '#666', fontWeight: '500' }}>Prosečna ocena:</span>
+                    {song.averageRating !== undefined && song.averageRating > 0 && (
+                      <span style={{ fontSize: '16px', fontWeight: '600', color: '#667eea' }}>
+                        {song.averageRating.toFixed(1)}
+                      </span>
+                    )}
+                    {song.ratingCount !== undefined && song.ratingCount > 0 && (
+                      <span style={{ fontSize: '14px', color: '#999', marginLeft: '4px' }}>
+                        ({song.ratingCount} {song.ratingCount === 1 ? 'ocena' : 'ocena'})
+                      </span>
+                    )}
+                    {(!song.averageRating || song.averageRating === 0) && (!song.ratingCount || song.ratingCount === 0) && (
+                      <span style={{ fontSize: '14px', color: '#999' }}>
+                        Nema ocena
+                      </span>
+                    )}
                   </div>
                 )}
 

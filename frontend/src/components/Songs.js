@@ -143,14 +143,19 @@ const Songs = () => {
     setError('');
     setUploading(false);
 
+    // Prepare song data - exclude audioFileUrl if uploading new file (backend will set it)
     const songData = {
       name: formData.name,
       duration: parseInt(formData.duration),
       genre: formData.genre,
       albumId: formData.albumId,
       artistIds: formData.selectedArtistIds,
-      audioFileUrl: formData.audioFileUrl,
     };
+    
+    // Only include audioFileUrl if NOT uploading a new file
+    if (!audioFile && formData.audioFileUrl) {
+      songData.audioFileUrl = formData.audioFileUrl;
+    }
 
     try {
       let createdSongId;
@@ -163,19 +168,27 @@ const Songs = () => {
       }
 
       // Upload audio file to HDFS if selected (2.11)
+      // Backend UploadAudio handler will update audioFileUrl in database automatically
       if (audioFile && createdSongId) {
         setUploading(true);
         try {
+          // For newly created songs, wait a bit longer to ensure backend is ready
+          if (!editingSong) {
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second for new songs
+          }
           const uploadResult = await api.uploadAudioFile(createdSongId, audioFile);
           console.log('Audio uploaded to HDFS:', uploadResult);
-          // Update song with HDFS path
-          await api.updateSong(createdSongId, {
-            ...songData,
-            audioFileUrl: uploadResult.hdfsPath,
-          });
+          // Backend UploadAudio handler already updates audioFileUrl in database, no need to call updateSong again
+          
+          // Trigger events to notify SongDetail to refresh
+          // Storage event (for other tabs)
+          localStorage.setItem('songUpdated', createdSongId);
+          localStorage.removeItem('songUpdated');
+          // Custom event (for same window)
+          window.dispatchEvent(new CustomEvent('songUpdated', { detail: createdSongId }));
         } catch (uploadErr) {
           console.error('Upload error:', uploadErr);
-          setError(`Pesma je kreirana, ali upload audio fajla nije uspeo: ${uploadErr.message}`);
+          setError(`Pesma je ${editingSong ? 'ažurirana' : 'kreirana'}, ali upload audio fajla nije uspeo: ${uploadErr.message}`);
         } finally {
           setUploading(false);
         }

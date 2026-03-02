@@ -14,7 +14,7 @@ Sistem koristi **event-driven arhitekturu** za asinhronu komunikaciju između mi
 **Događaji:**
 - `new_artist` - kada se kreira novi umetnik
 - `new_album` - kada se kreira novi album
-- `new_song` - kada se kreira nova pesma
+- `new_song ` - kada se kreira nova pesma
 
 **Svrha:** Subscriptions service proverava koje korisnike treba obavestiti o novom sadržaju.
 

@@ -3,6 +3,8 @@ package store
 import (
 	"context"
 	"errors"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -88,11 +90,17 @@ func (r *SubscriptionRepository) GetByUserAndArtist(ctx context.Context, userID,
 }
 
 func (r *SubscriptionRepository) GetByUserAndGenre(ctx context.Context, userID, genre string) (*model.Subscription, error) {
+	// Normalize genre to lowercase for case-insensitive matching
+	normalizedGenre := strings.ToLower(strings.TrimSpace(genre))
+	
 	var subscription model.Subscription
 	err := r.collection.FindOne(ctx, bson.M{
 		"userId": userID,
 		"type":   "genre",
-		"genre":  genre,
+		"genre": bson.M{
+			"$regex":   "^" + regexp.QuoteMeta(normalizedGenre) + "$",
+			"$options": "i", // case-insensitive
+		},
 	}).Decode(&subscription)
 
 	if err != nil {
@@ -132,10 +140,17 @@ func (r *SubscriptionRepository) DeleteByUserAndArtist(ctx context.Context, user
 }
 
 func (r *SubscriptionRepository) DeleteByUserAndGenre(ctx context.Context, userID, genre string) error {
+	// Normalize genre to lowercase for case-insensitive matching
+	normalizedGenre := strings.ToLower(strings.TrimSpace(genre))
+	
+	// Use case-insensitive regex for matching
 	result, err := r.collection.DeleteOne(ctx, bson.M{
 		"userId": userID,
 		"type":   "genre",
-		"genre":  genre,
+		"genre": bson.M{
+			"$regex":   "^" + regexp.QuoteMeta(normalizedGenre) + "$",
+			"$options": "i", // case-insensitive
+		},
 	})
 	if err != nil {
 		return err
@@ -165,11 +180,18 @@ func (r *SubscriptionRepository) GetByArtistID(ctx context.Context, artistID str
 	return subscriptions, nil
 }
 
-// GetByGenre returns all subscriptions for a specific genre
+// GetByGenre returns all subscriptions for a specific genre (case-insensitive)
 func (r *SubscriptionRepository) GetByGenre(ctx context.Context, genre string) ([]*model.Subscription, error) {
+	// Normalize genre to lowercase for case-insensitive matching
+	normalizedGenre := strings.ToLower(strings.TrimSpace(genre))
+	
+	// Use case-insensitive regex for matching
 	cursor, err := r.collection.Find(ctx, bson.M{
-		"type":  "genre",
-		"genre": genre,
+		"type": "genre",
+		"genre": bson.M{
+			"$regex":   "^" + regexp.QuoteMeta(normalizedGenre) + "$",
+			"$options": "i", // case-insensitive
+		},
 	})
 	if err != nil {
 		return nil, err
@@ -182,4 +204,20 @@ func (r *SubscriptionRepository) GetByGenre(ctx context.Context, genre string) (
 	}
 
 	return subscriptions, nil
+}
+
+// UpdateArtistName updates the artistName field for a subscription (CQRS - 2.9)
+func (r *SubscriptionRepository) UpdateArtistName(ctx context.Context, subscriptionID, artistName string) error {
+	result, err := r.collection.UpdateOne(
+		ctx,
+		bson.M{"_id": subscriptionID},
+		bson.M{"$set": bson.M{"artistName": artistName}},
+	)
+	if err != nil {
+		return err
+	}
+	if result.MatchedCount == 0 {
+		return errors.New("subscription not found")
+	}
+	return nil
 }

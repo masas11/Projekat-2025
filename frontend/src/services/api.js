@@ -22,6 +22,8 @@ class ApiService {
     const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+    } else {
+      console.warn('No token found in localStorage for request to:', endpoint);
     }
 
     try {
@@ -263,6 +265,7 @@ class ApiService {
 
   getStreamUrl(songId) {
     const token = localStorage.getItem('token');
+    // Don't add timestamp here - it will be added by AudioPlayer when needed
     if (token) {
       return `${this.baseURL}/api/content/songs/${songId}/stream?token=${encodeURIComponent(token)}`;
     }

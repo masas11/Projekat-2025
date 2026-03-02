@@ -24,10 +24,24 @@ func NewHDFSClient(namenodeURL string) *HDFSClient {
 	if namenodeURL == "" {
 		namenodeURL = "http://hdfs-namenode:9870"
 	}
+	// Create transport with increased timeouts and keep-alive
+	transport := &http.Transport{
+		MaxIdleConns:          100,
+		IdleConnTimeout:        90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		DisableKeepAlives:     false, // Enable keep-alive for better connection reuse
+		WriteBufferSize:        128 * 1024, // 128KB write buffer (increased for better throughput)
+		ReadBufferSize:         128 * 1024, // 128KB read buffer
+		MaxIdleConnsPerHost:    10,         // Allow more connections per host
+		ResponseHeaderTimeout:  120 * time.Second, // Timeout for response headers (increased)
+		ExpectContinueTimeout:  1 * time.Second,    // Timeout for Expect: 100-continue
+	}
+	
 	return &HDFSClient{
 		baseURL: namenodeURL,
 		httpClient: &http.Client{
-			Timeout: 120 * time.Second, // Increased timeout for large file uploads
+			Timeout:   600 * time.Second, // Increased timeout for large file uploads (10 minutes)
+			Transport: transport,
 		},
 	}
 }
@@ -53,7 +67,7 @@ func (c *HDFSClient) UploadFile(localPath, hdfsPath string) error {
 	}
 
 	// Step 1: Create file (redirect)
-	createURL := fmt.Sprintf("%s/webhdfs/v1%s?op=CREATE&overwrite=true", c.baseURL, hdfsPath)
+	createURL := fmt.Sprintf("%s/webhdfs/v1%s?op=CREATE&overwrite=true&user.name=root", c.baseURL, hdfsPath)
 	req, err := http.NewRequest("PUT", createURL, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
@@ -140,16 +154,17 @@ func (c *HDFSClient) UploadData(data []byte, hdfsPath string) error {
 	}
 
 	// Retry logic for upload (HDFS can be flaky)
-	maxRetries := 3
+	maxRetries := 5
 	var lastErr error
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		if attempt > 0 {
-			// Wait before retry (exponential backoff)
-			time.Sleep(time.Duration(attempt) * time.Second)
+			// Wait before retry (exponential backoff with longer delays)
+			backoffDelay := time.Duration(attempt*2) * time.Second
+			time.Sleep(backoffDelay)
 		}
 
 		// Step 1: Create file (redirect)
-		createURL := fmt.Sprintf("%s/webhdfs/v1%s?op=CREATE&overwrite=true", c.baseURL, hdfsPath)
+		createURL := fmt.Sprintf("%s/webhdfs/v1%s?op=CREATE&overwrite=true&user.name=root", c.baseURL, hdfsPath)
 		req, err := http.NewRequest("PUT", createURL, nil)
 		if err != nil {
 			lastErr = fmt.Errorf("failed to create request: %w", err)
@@ -176,13 +191,19 @@ func (c *HDFSClient) UploadData(data []byte, hdfsPath string) error {
 			}
 
 			// Step 2: Upload file data to redirect URL
-			uploadCtx, uploadCancel := context.WithTimeout(context.Background(), 120*time.Second)
+			// Use streaming approach with explicit Content-Length (HDFS requires it)
+			uploadCtx, uploadCancel := context.WithTimeout(context.Background(), 600*time.Second) // Increased to 10 minutes for large files
 			req, err = http.NewRequestWithContext(uploadCtx, "PUT", redirectURL, bytes.NewReader(data))
 			if err != nil {
 				uploadCancel()
 				lastErr = fmt.Errorf("failed to create upload request: %w", err)
 				continue
 			}
+			
+			// Set Content-Length explicitly (required by HDFS WebHDFS API)
+			req.ContentLength = int64(len(data))
+			req.Header.Set("Content-Type", "application/octet-stream")
+			req.Header.Set("Connection", "keep-alive") // Keep connection alive
 
 			resp, err = c.httpClient.Do(req)
 			uploadCancel()
@@ -203,13 +224,18 @@ func (c *HDFSClient) UploadData(data []byte, hdfsPath string) error {
 		}
 
 		// If no redirect, try direct upload
-		uploadCtx, uploadCancel := context.WithTimeout(context.Background(), 120*time.Second)
+		uploadCtx, uploadCancel := context.WithTimeout(context.Background(), 600*time.Second) // Increased to 10 minutes for large files
 		req, err = http.NewRequestWithContext(uploadCtx, "PUT", createURL, bytes.NewReader(data))
 		if err != nil {
 			uploadCancel()
 			lastErr = fmt.Errorf("failed to create upload request: %w", err)
 			continue
 		}
+		
+		// Set Content-Length explicitly (required by HDFS WebHDFS API)
+		req.ContentLength = int64(len(data))
+		req.Header.Set("Content-Type", "application/octet-stream")
+		req.Header.Set("Connection", "keep-alive") // Keep connection alive
 
 		resp, err = c.httpClient.Do(req)
 		uploadCancel()
@@ -236,7 +262,7 @@ func (c *HDFSClient) UploadData(data []byte, hdfsPath string) error {
 // DownloadFile downloads a file from HDFS
 func (c *HDFSClient) DownloadFile(hdfsPath string) ([]byte, error) {
 	// Step 1: Open file (redirect)
-	openURL := fmt.Sprintf("%s/webhdfs/v1%s?op=OPEN", c.baseURL, hdfsPath)
+	openURL := fmt.Sprintf("%s/webhdfs/v1%s?op=OPEN&user.name=root", c.baseURL, hdfsPath)
 	req, err := http.NewRequest("GET", openURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -296,7 +322,7 @@ func (c *HDFSClient) DownloadFile(hdfsPath string) ([]byte, error) {
 
 // FileExists checks if a file exists in HDFS
 func (c *HDFSClient) FileExists(hdfsPath string) (bool, error) {
-	statusURL := fmt.Sprintf("%s/webhdfs/v1%s?op=GETFILESTATUS", c.baseURL, hdfsPath)
+	statusURL := fmt.Sprintf("%s/webhdfs/v1%s?op=GETFILESTATUS&user.name=root", c.baseURL, hdfsPath)
 	req, err := http.NewRequest("GET", statusURL, nil)
 	if err != nil {
 		return false, fmt.Errorf("failed to create request: %w", err)
@@ -320,7 +346,7 @@ func (c *HDFSClient) FileExists(hdfsPath string) (bool, error) {
 
 // DeleteFile deletes a file from HDFS
 func (c *HDFSClient) DeleteFile(hdfsPath string) error {
-	deleteURL := fmt.Sprintf("%s/webhdfs/v1%s?op=DELETE&recursive=false", c.baseURL, hdfsPath)
+	deleteURL := fmt.Sprintf("%s/webhdfs/v1%s?op=DELETE&recursive=false&user.name=root", c.baseURL, hdfsPath)
 	req, err := http.NewRequest("DELETE", deleteURL, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
@@ -342,7 +368,7 @@ func (c *HDFSClient) DeleteFile(hdfsPath string) error {
 
 // Mkdir creates a directory in HDFS
 func (c *HDFSClient) Mkdir(hdfsPath string, createParent bool) error {
-	mkdirURL := fmt.Sprintf("%s/webhdfs/v1%s?op=MKDIRS&permission=755", c.baseURL, hdfsPath)
+	mkdirURL := fmt.Sprintf("%s/webhdfs/v1%s?op=MKDIRS&permission=755&user.name=root", c.baseURL, hdfsPath)
 	req, err := http.NewRequest("PUT", mkdirURL, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
@@ -375,7 +401,7 @@ func (c *HDFSClient) Mkdir(hdfsPath string, createParent bool) error {
 
 // GetFileStatus returns file status information
 func (c *HDFSClient) GetFileStatus(hdfsPath string) (map[string]interface{}, error) {
-	statusURL := fmt.Sprintf("%s/webhdfs/v1%s?op=GETFILESTATUS", c.baseURL, hdfsPath)
+	statusURL := fmt.Sprintf("%s/webhdfs/v1%s?op=GETFILESTATUS&user.name=root", c.baseURL, hdfsPath)
 	req, err := http.NewRequest("GET", statusURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)

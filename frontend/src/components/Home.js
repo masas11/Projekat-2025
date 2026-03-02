@@ -81,25 +81,45 @@ const Home = () => {
     return () => window.removeEventListener('focus', handleFocus);
   }, [isAuthenticated, user, fetchRecommendations]);
 
-  // Fetch most played songs (2.12) - available for all users
+  // Fetch songs from subscribed genres with rating >= 4 (replaces most played songs)
   useEffect(() => {
-    const fetchMostPlayed = async () => {
+    const fetchSubscribedGenreSongs = async () => {
+      if (!isAuthenticated || !user?.id || user?.username === 'admin') {
+        return;
+      }
+      
       setLoadingMostPlayed(true);
       try {
-        console.log('Fetching most played songs...');
-        const songs = await api.getMostPlayedSongs(10);
-        console.log('Most played songs received:', songs);
-        setMostPlayedSongs(Array.isArray(songs) ? songs : []);
-        console.log('Most played songs state set to:', Array.isArray(songs) ? songs : []);
+        const token = localStorage.getItem('token');
+        const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:8081';
+        const response = await fetch(`${apiUrl}/api/ratings/recommendations?userId=${user.id}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          // Use subscribed genre songs instead of most played
+          const songs = data.subscribedGenreSongs || [];
+          // Limit to 5 songs (as requested) and add play count info if available
+          setMostPlayedSongs(songs.slice(0, 5).map(song => ({
+            ...song,
+            playCount: song.playCount || 0
+          })));
+        } else {
+          setMostPlayedSongs([]);
+        }
       } catch (err) {
-        console.error('Error fetching most played songs:', err);
-        setMostPlayedSongs([]); // Set empty array on error
+        console.error('Error fetching subscribed genre songs:', err);
+        setMostPlayedSongs([]);
       } finally {
         setLoadingMostPlayed(false);
       }
     };
-    fetchMostPlayed();
-  }, []);
+    fetchSubscribedGenreSongs();
+  }, [isAuthenticated, user]);
 
   const SongCard = ({ song, reason }) => (
     <div className="song-card-modern" style={{
@@ -421,7 +441,7 @@ const Home = () => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '30px' }}>
                 <div style={{ fontSize: '40px' }}>🔥</div>
                 <h2 style={{ margin: 0, fontSize: '28px', fontWeight: '700', color: '#333' }}>
-                  Najslušanije pesme
+                  Pesme iz žanrova na koje ste pretplaćeni
                 </h2>
               </div>
               {loadingMostPlayed ? (
@@ -432,7 +452,7 @@ const Home = () => {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   {mostPlayedSongs.map((song, index) => (
                     <div
-                      key={song.id}
+                      key={song.songId || song.id || index}
                       style={{
                         padding: '16px',
                         background: 'linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.9) 100%)',
@@ -453,7 +473,7 @@ const Home = () => {
                         e.currentTarget.style.transform = 'translateX(0)';
                         e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
                       }}
-                      onClick={() => window.location.href = `/songs/${song.id}`}
+                      onClick={() => window.location.href = `/songs/${song.songId || song.id}`}
                     >
                       <div style={{
                         width: '50px',
@@ -475,7 +495,7 @@ const Home = () => {
                           {song.name}
                         </div>
                         <div style={{ fontSize: '14px', color: '#666' }}>
-                          {song.genre} • {song.playCount} puštanja
+                          {song.genre} {song.playCount ? `• ${song.playCount} puštanja` : ''}
                         </div>
                       </div>
                     </div>
@@ -577,26 +597,6 @@ const Home = () => {
 
               {recommendations && (
                 <>
-                  {recommendations.subscribedGenreSongs && recommendations.subscribedGenreSongs.length > 0 && (
-                    <div style={{ marginBottom: '40px' }}>
-                      <h3 style={{
-                        fontSize: '22px',
-                        fontWeight: '600',
-                        marginBottom: '20px',
-                        color: '#333',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '10px'
-                      }}>
-                        <span>🎯</span>
-                        <span>Na osnovu vaših pretplata</span>
-                      </h3>
-                      {recommendations.subscribedGenreSongs.slice(0, 5).map((song, index) => (
-                        <SongCard key={index} song={song} reason={song.reason} />
-                      ))}
-                    </div>
-                  )}
-
                   {recommendations.topRatedSong && (
                     <div style={{ marginBottom: '40px' }}>
                       <h3 style={{
@@ -615,8 +615,7 @@ const Home = () => {
                     </div>
                   )}
 
-                  {(!recommendations.subscribedGenreSongs || recommendations.subscribedGenreSongs.length === 0) && 
-                   !recommendations.topRatedSong && (
+                  {!recommendations.topRatedSong && (
                     <div style={{
                       textAlign: 'center',
                       padding: '40px',
